@@ -82,7 +82,7 @@ double p_movement = 0.5;
 void Initial(void)
 {
 	// readout parameters
-	int myseed = 11;//time(NULL);
+	int myseed = 5431;//time(NULL);
 	int myncol = 300;
 	int mynrow = 300;
   char* readOut;
@@ -311,27 +311,36 @@ void NextState(int row,int col)
     }else{
       
       UpdateABproduction(row, col);
+      //now we will try to move
       if(p_movement>0.){
-        nei = GetNeighborP(world,row,col,1+(int)(8.*genrand_real2()));
-        flag=0;
-        if(antib[row][col].valarray[0]!=0){ //if there are antibiotic at all, we check if those produced by focal cells are there
-          int i=0;
-          while(antib[row][col].valarray[i]!=0 && i<antib[row][col].val2){
-            if(nei->val2!=antib[row][col].valarray[i]){
-              flag=1;
-              break;
+        int neidir=1+(int)(8.*genrand_real2());
+        
+        int neirow, neicol;
+        GetNeighborC(world, row, col, neidir, &neirow, &neicol);
+        nei=&world[neirow][neicol];
+        if(nei->val2==0){ //we can only move if neighbour is empty
+          flag=0;
+          if(antib[neirow][neicol].valarray[0]!=0){ //if there are foreign ABs, we cannot move into the neighbouring pixel
+            int i=0;
+            while(antib[neirow][neicol].valarray[i]!=0 && i<antib[neirow][neicol].val2){
+             if(world[row][col].val2!=antib[neirow][neicol].valarray[i]){
+               flag=1;
+               break;
+             }
+              i++;
             }
-            i++;
+          }
+          if(!flag && genrand_real2() < p_movement){
+            *nei = world[row][col];
+            world[row][col].val=0;
+            world[row][col].val2=0;
+            world[row][col].seq[0]='\0';
           }
         }
-        if(nei->val2==0 && (!flag) && genrand_real2() < p_movement){
-          *nei = world[row][col];
-          world[row][col].val=0;
-          world[row][col].val2=0;
-          world[row][col].seq[0]='\0';
-        }
-      } 
-    }
+
+  
+      }
+    } 
   }
   // sum = CountMoore8(world,1,row,col);
   //
