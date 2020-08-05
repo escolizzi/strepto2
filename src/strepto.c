@@ -593,8 +593,8 @@ int Mutate(TYPE2** world, int row, int col)
   int nrmuts=bnldev(2*ddrate,genome_size);
   int mutposarr[MAXSIZE];
   int imut;
-  for(imut=0;i<genome_size;i++) mutposarr[imut]=imut;
-  for(imut=0;i<nrmuts;i++) {
+  for(imut=0;imut<genome_size;imut++) mutposarr[imut]=imut;
+  for(imut=0;imut<nrmuts;imut++) {
     int rpos = imut+ genrand_real2() * (genome_size - imut);
     int tmp = mutposarr[imut];
     mutposarr[imut] = mutposarr[rpos];
