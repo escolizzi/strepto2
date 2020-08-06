@@ -25,6 +25,10 @@ So far nothinf happen, except bacterial growth.
 
 #define MAXSIZE 256 // same as cash2.h, max size of genome
 
+int MAXRADIUS = 10; //radius of antibiotics
+struct point *ab_poslist;
+int len_ab_poslist;
+void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS);
 
 //// Biological function declarations
 // ... for cells and individuals
@@ -120,12 +124,16 @@ void Initial(void)
   /* the value of boundary (default=(TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.})*/
   boundaryvalue2 = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.};
 
+  
 }
 
 void InitialPlane(void)
 {
   MakePlane(&world,&antib,&G,&A,&R);
 
+  InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS);
+  // for(int i=0; i<len_ab_poslist;i++) printf("%d %d\n",ab_poslist[i].row,ab_poslist[i].col);
+  // exit(1);
   /* InitialSet(1,2,3,4,5)
     1: name of plane
     2: number of the state other than the background state
@@ -389,7 +397,7 @@ void Update(void)
     PrintPopStats(world,antib);
   }
   
-  int proposed_season_change=500;
+  int proposed_season_change=1000;
   if(Time%proposed_season_change==0 && Time>0){
     ChangeSeason(world);
   }
@@ -736,42 +744,78 @@ int Mutate(TYPE2** world, int row, int col)
 void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
 
-  int i,j,k;
+  int i,k;
   //check number of growth genes
   double fg=Genome2genenumber(icell->seq,'F');
   double ag=Genome2genenumber(icell->seq,'A');
   //cell has no genome: cannot reproduce
   if (ag==0) return;
 
-  int MAXRADIUS=10;
+  //int MAXRADIUS=10;
   double agscale=2.;
-  double ratio = ag/(fg+ag);
+  // double ratio = ag/(fg+ag);
   double agprod=0.01*ag/(ag+agscale)*(exp(-3.*fg)); // was -> /(ratio+rscale));
-  
-  for (i=row-MAXRADIUS; i<row+MAXRADIUS+1; i++){
-    for (j=col-MAXRADIUS; j<col+MAXRADIUS+1; j++){
-      if( sqrt((double)((i-row)*(i-row)+(j-col)*(j-col)))<=MAXRADIUS && genrand_real2()<agprod){
-        int found=0;
-        int ii=i,jj=j;
-        if(i<1) ii = nrow+i; 
-        if(i>nrow) ii = i%nrow;
-        if(j<1) jj = ncol+j; 
-        if(j>ncol) jj = j%ncol;
-        for (k=0; k<antib[ii][jj].val2;k++){
-          if(antib[ii][jj].valarray[k]==icell->val2){
-            found=1;
-            break;
-          }
-        }
-        if(!found){
-          antib[ii][jj].valarray[antib[ii][jj].val2]=icell->val2;
-          antib[ii][jj].val++;
-          antib[ii][jj].val=antib[ii][jj].val%10;  
-          antib[ii][jj].val2++;
-        }
+  double howmany_pos_get_ab = bnldev(agprod,len_ab_poslist);
+  //ab_poslist
+  struct point tmp;
+  int pos_ab_poslist;
+  for(i=0; i< howmany_pos_get_ab; i++){
+    pos_ab_poslist= i+(int)((len_ab_poslist-i)*genrand_real2());
+    tmp = ab_poslist[pos_ab_poslist];
+    ab_poslist[pos_ab_poslist] = ab_poslist[i];
+    ab_poslist[i] = tmp;
+  }
+  for(i=0;i<howmany_pos_get_ab;i++){
+    int ii = row+ab_poslist[i].row;
+    int jj = col+ab_poslist[i].col;
+    if(ii<1) ii = nrow+ii; 
+    if(ii>nrow) ii = ii%nrow;
+    if(jj<1) jj = ncol+jj; 
+    if(jj>ncol) jj = jj%ncol;
+    int found=0;
+    for (k=0; k<antib[ii][jj].val2;k++){
+      if(antib[ii][jj].valarray[k]==icell->val2){
+        found=1;
+        break;
       }
     }
+    if(!found){
+      antib[ii][jj].valarray[antib[ii][jj].val2]=icell->val2;
+      antib[ii][jj].val2++;
+      antib[ii][jj].val=antib[ii][jj].val2%10;  
+    }
   }
+
+  // WAS THIS. SUPER SLOW.
+  // // int howmany=0;
+  // for (i=row-MAXRADIUS; i<row+MAXRADIUS+1; i++){
+  //   for (j=col-MAXRADIUS; j<col+MAXRADIUS+1; j++){
+  //     if( sqrt((double)((i-row)*(i-row)+(j-col)*(j-col)))<=MAXRADIUS){
+  //     //  howmany++; 
+  //      if( genrand_real2()<agprod){
+  //       int found=0;
+  //       int ii=i,jj=j;
+  //       if(i<1) ii = nrow+i; 
+  //       if(i>nrow) ii = i%nrow;
+  //       if(j<1) jj = ncol+j; 
+  //       if(j>ncol) jj = j%ncol;
+  //       for (k=0; k<antib[ii][jj].val2;k++){
+  //         if(antib[ii][jj].valarray[k]==icell->val2){
+  //           found=1;
+  //           break;
+  //         }
+  //       }
+  //       if(!found){
+  //         antib[ii][jj].valarray[antib[ii][jj].val2]=icell->val2;
+  //         antib[ii][jj].val++;
+  //         antib[ii][jj].val=antib[ii][jj].val%10;  
+  //         antib[ii][jj].val2++;
+  //       }
+  //     }
+  //   }
+  // }}
+// printf("howmany = %d\n", howmany);
+// exit(1);
 }
 
 int Char2Num(char c)
@@ -988,6 +1032,37 @@ void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R)
       else R[i][j].val = 255;
     }
 }
+
+void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS){
+  int i,j, howmany=0;
+  for (i=-MAXRADIUS; i<MAXRADIUS+1; i++){
+    for (j=-MAXRADIUS; j<MAXRADIUS+1; j++){
+      if( sqrt((double)( (i*i)+(j*j) ))<=MAXRADIUS){
+        howmany++; 
+      }
+    }
+  }
+  *p_len_ab_poslist = howmany; //set the len_ab_poslist variable
+  *p_ab_poslist = malloc(howmany * sizeof(struct point)); //alllllocate the array
+  int array_pos=0;
+  //fill arrrrray
+  for (i=-MAXRADIUS; i<MAXRADIUS+1; i++){
+    for (j=-MAXRADIUS; j<MAXRADIUS+1; j++){
+      if( sqrt((double)( (i*i)+(j*j) ))<=MAXRADIUS){
+        (*p_ab_poslist)[array_pos].row = i;
+        (*p_ab_poslist)[array_pos].col = j;
+        array_pos++;
+      }
+    }
+  }
+  
+  // printf("Hello, howmany = %d\n", *p_len_ab_poslist);
+  // printf("The last position looks like: row = %d, col = %d \n", (*p_ab_poslist)[len_ab_poslist-1].row,(*p_ab_poslist)[len_ab_poslist-1].col);
+  
+  // exit(1);
+  return;
+}
+
 // Make bottleneck by reseeding pop with number of people proportional to
 // whoever was there
 // void SporulateCells(TYPE2 **world)
