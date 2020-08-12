@@ -18,6 +18,7 @@ So far nothinf happen, except bacterial growth.
 #include <float.h>
 #include <limits.h>
 #include <signal.h>
+#include <dirent.h>
 #include <cash2003.h>
 #include <cash2.h>
 #include <mersenne.h>
@@ -25,30 +26,25 @@ So far nothinf happen, except bacterial growth.
 
 #define MAXSIZE 256 // same as cash2.h, max size of genome
 
-int MAXRADIUS = 10; //radius of antibiotics
-struct point *ab_poslist;
-int len_ab_poslist;
-void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS);
+struct point *ab_poslist; //2D array used to efficiently randomize antibiotics placement
+int len_ab_poslist; //size of ab_poslist
+void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS); //initializes ab_poslist
 
 //// Biological function declarations
-// ... for cells and individuals
-int Mutate(TYPE2 **world, int row, int col);                 // Mutate the genome at this position
-// .. for the ecosystem / whole system
-void UpdateABproduction(int row, int col);
-void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R);
-void ChangeSeason(TYPE2 **world);
-//// Data function daclarations
+int Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this position
+void UpdateABproduction(int row, int col);        // Places new antibiotics in the field
+void ChangeSeason(TYPE2 **world);                 // "Sporulates" bacteria and restarts the field
+
+//Printing, plotting, painting.
+void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R); 
 int Genome2genenumber(const char *seq, char gene);  // Convert genome to int of number of genes equal to char gene
 void PrintPopStats(TYPE2 **world, TYPE2 **antib);
+void PrintPopFull(TYPE2 **world,TYPE2 **antib);
+int tomovie_nrow;
+int tomovie_ncol;
+int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R);
 void Pause();
 
-//DEPRECATED
-void UpdateAntibPlane(TYPE2 **world,TYPE2 **antib); //antib generated, degraded, diffusion
-void SporulateCells(TYPE2 **world);
-void KillSensitiveCells(TYPE2 **world, TYPE2 **antib);
-void ProduceAntib(TYPE2 **world,TYPE2 **antib);
-void DegradeAntib(TYPE2 **antib);
-//DEPRECATED
 
 // Static global data structures and parameters
 static TYPE2** world;
@@ -57,31 +53,16 @@ static TYPE2** G;
 static TYPE2** A;
 static TYPE2** R;
 //static TYPE2 empty = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.,{'\0'},{'\0'}};
-#define MAXSIZE 256 // same as cash2.h, max size of genome
 
-//genome alphabet
-static char* AZ="FAB";
-//// Biological parameters
-// Growth and fitness thingies. Fitness = (numG*growthperG-numA*prodperA-numR*costperR)
-double beta=0.1;          //scaling factor for probability of replication
-double growthperG = 3.0;  // How much fitness (=claim) do you get per G gene
-double prodperA = 1.0;    // How much antibiotics do you produce per time step per A, is subtracted from fitness
-double costperR = 1.0;    // How much resistance costs, is subtracted from fitness
-double resistance = 2.0;  // How much does each resistance can mitigate death
-
-// Ecosystem thingies
-int time_growth = 300;  // Duration of the growh phase
-int time_antib = 200;   // Duration of the antibiotic production phase
-int diffusion_steps = 10;
-double diffusion_rate = 0.2;
-double degradation = 0.05;
-
-double bottleneck = 0.001; // this many cells sporulate
-int mix = 0;			// Mix after sporulation?
-
-int init_genome_size = 15;
-double rscale=10.;
+static char* AZ="FAB"; //genome alphabet
+int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
+int init_genome_size = 15; 
+double rscale=10.; 
 double p_movement = 0.5;
+char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
+char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
+int par_movie_period = 20;
+int par_outputdata_period = 100;
 
 void Initial(void)
 {
@@ -90,23 +71,26 @@ void Initial(void)
 	int myncol = 300;
 	int mynrow = 300;
   char* readOut;
+  display=0;
 
 	for(int i = 0; i < (int)argc_g; i++)
 	{
-	    readOut = (char*)argv_g[i];
+	  readOut = (char*)argv_g[i];
 		if(strcmp(readOut, "-seed") == 0) myseed = atoi(argv_g[i+1]);
-		if(strcmp(readOut, "-mix") == 0) mix = atoi(argv_g[i+1]);
-	  if(strcmp(readOut, "-resistance") == 0) resistance = atof(argv_g[i+1]);
-		if(strcmp(readOut, "-bottleneck") == 0) bottleneck = atof(argv_g[i+1]);
-		if(strcmp(readOut, "-diffusion-steps") == 0) diffusion_steps = atoi(argv_g[i+1]);
-		if(strcmp(readOut, "-diffusion-rate") == 0) diffusion_rate = atof(argv_g[i+1]);
-		if(strcmp(readOut, "-degradation") == 0) degradation = atof(argv_g[i+1]);
-		if(strcmp(readOut, "-time-growth") == 0) time_growth = atoi(argv_g[i+1]);
-		if(strcmp(readOut, "-time-antib") == 0) time_antib = atoi(argv_g[i+1]);
 		if(strcmp(readOut, "-c") == 0) myncol = atoi(argv_g[i+1]);
 		if(strcmp(readOut, "-r") == 0) mynrow = atoi(argv_g[i+1]);
-
+    if(strcmp(readOut, "-moviedir") == 0) strcpy( par_movie_directory_name , argv_g[i+1] );
+    if(strcmp(readOut, "-datafile") == 0) strcpy( par_fileoutput_name , argv_g[i+1] );
+    if(strcmp(readOut, "-movie_period") == 0) par_movie_period = atoi(argv_g[i+1]);
+    if(strcmp(readOut, "-data_period") == 0) par_outputdata_period = atoi(argv_g[i+1]);
+    if(strcmp(readOut, "-display") == 0) display = atoi(argv_g[i+1]);
 	}
+  //check if par_movie_directory_name and par_fileoutput_name already exist,
+  // simulation not starting if that is the case
+  DIR *dir = opendir(par_movie_directory_name);
+  if(dir){ fprintf(stderr, "Directory %s already exists, simulation not starting\n",par_movie_directory_name); exit(1);}
+  FILE *fp = fopen(par_fileoutput_name,"r"); 
+  if(fp){ fprintf(stderr, "File %s already exists, simulation not starting\n",par_fileoutput_name); exit(1);}
 
   MaxTime = 2147483647; /* default=2147483647 */
   nrow = mynrow; /* # of row (default=100)*/
@@ -123,7 +107,12 @@ void Initial(void)
   /* useally, one does not have to change the followings */
   /* the value of boundary (default=(TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.})*/
   boundaryvalue2 = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.};
-
+  
+  tomovie_nrow=nrow;
+  tomovie_ncol=nplane*ncol;
+  OpenPNG(par_movie_directory_name, tomovie_nrow, tomovie_ncol); //recall that for some weird reason you must allocate a data structure
+                                                                 // of size tomovie_nrow+1 and tomovie_ncol+1, if OpenPNG gets arguments
+                                                                 // tomovie_nrow and tomovie_ncol 
   
 }
 
@@ -174,7 +163,7 @@ void InitialPlane(void)
   }
   //InitialSet(world,1,0,1,0.001);
   //ReadSavedData("glidergun.sav",1,world);
-  printf("\n\nworld is ready. Click or scroll your mouse to update the CA.\n\n");
+  printf("\n\nworld is ready. Let's go!\n\n");
   Boundaries2(world);
 
 
@@ -245,7 +234,7 @@ void NextState(int row,int col)
         //save direction
         dirarray[counter]=k;
 
-        double ratio=fg/(fg+ag);
+        //double ratio=fg/(fg+ag);
         double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
         double growth=0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
 
@@ -293,11 +282,7 @@ void NextState(int row,int col)
 
       }
     }
-    // else no one replicates.
-
-
-    //int neival=GetNeighbor(world,row,col, 1+(int)(8*genrand_real2()) );
-    //if(neival>0 && CountMoore8(world,0,row,col)>6 && genrand_real2() < 0.5 ) world[row][col].val=neival;
+    
   }
   // movement + continuous antib + death if you are on it prod maybe helps?
   else if(world[row][col].val2!=0){
@@ -328,16 +313,16 @@ void NextState(int row,int col)
         nei=&world[neirow][neicol];
         if(nei->val2==0){ //we can only move if neighbour is empty
           flag=0;
-          if(antib[neirow][neicol].valarray[0]!=0){ //if there are foreign ABs, we cannot move into the neighbouring pixel
-            int i=0;
-            while(antib[neirow][neicol].valarray[i]!=0 && i<antib[neirow][neicol].val2){
-             if(world[row][col].val2!=antib[neirow][neicol].valarray[i]){
-               flag=1;
-               break;
-             }
-              i++;
-            }
-          }
+          // if(antib[neirow][neicol].valarray[0]!=0){ //if there are foreign ABs, we cannot move into the neighbouring pixel
+          //   int i=0;
+          //   while(antib[neirow][neicol].valarray[i]!=0 && i<antib[neirow][neicol].val2){
+          //    if(world[row][col].val2!=antib[neirow][neicol].valarray[i]){
+          //      flag=1;
+          //      break;
+          //    }
+          //     i++;
+          //   }
+          // }
           if(!flag && genrand_real2() < p_movement){
             *nei = world[row][col];
             world[row][col].val=0;
@@ -350,52 +335,28 @@ void NextState(int row,int col)
       }
     } 
   }
-  // sum = CountMoore8(world,1,row,col);
-  //
-  //
-  // if(sum==3 || (sum==2 && world[row][col].val==1))
-  //   world[row][col].val = 1;
-  // else
-  //   world[row][col].val = 0;
 
 }
 
-
-;
-
 void Update(void)
 {
-  // int time_season = time_growth + time_antib;
-
-  // if(Time && Time%time_season==0)
-  // {
-	//   SporulateCells(world);  	  // A large fraction of the pop is killed. Ensures at least 1 survivor
-	//   if(mix) PerfectMix(world);  		  // The rest are redistributed
-  // }
-  // else if(Time && Time%time_season<time_growth)
-  // {
-	//   Asynchronous(); 						  // Growth of streptomyces population
-  // }
-  // else if(Time && Time%time_season<time_growth+time_antib)
-  // {
-	// 	ProduceAntib(world,antib); // Produce antibiotics
-	// 	KillSensitiveCells(world,antib);
-  // }
-
-
-  // // UpdateAntibPlane(world,antib); //antib generated, degraded, diffusion
-  // //Synchronous(1,world);
-  // DegradeAntib(antib);
-
+  
   Asynchronous(); 
-  if(Time%10==0) {
+
+  if(Time%par_movie_period==0) {
     ColourPlanes(world,G,A,R); // Pretty big speed cost here, can be fixed later
-    Display(world,antib,G,A,R);
+    if(display) Display(world,antib,G,A,R);
+    else ToMovie(world,antib,G,A,R);
   }
-  if(Time%100==0) {
-    printf("Time = %d\n",Time);
-    PrintPopStats(world,antib);
+  if(Time%par_outputdata_period==0) {
+    if(display){
+      fprintf(stderr,"Time = %d\n",Time);
+      PrintPopStats(world,antib);
+    }else{
+      PrintPopFull(world,antib);
+    }
   }
+  
   
   int proposed_season_change=1000;
   if(Time%proposed_season_change==0 && Time>0){
@@ -425,40 +386,6 @@ void Pause()
   getchar();
 }
 
-// //antib generated, degraded, diffusion
-// void ProduceAntib(TYPE2 **world,TYPE2 **antib)
-// {
-//   int i,j;
-
-
-//   //antibiotics are generated
-//   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++){
-//     double antib_prod =  prodperA*Genome2genenumber(world[i][j].seq,'A');
-//   //  printf("Producing this many antibiotics: %f\n", antib_prod);
-//     if(world[i][j].val) antib[i][j].fval += antib_prod;  // world[i][j].fval;
-//     antib[i][j].val = (antib[i][j].fval < 100)? (100+antib[i][j].fval):200;
-//     antib[i][j].val = (antib[i][j].fval<0.1)? 2: antib[i][j].val;
-//   }
-
-
-// }
-
-// //antib generated, degraded, diffusion
-// void DegradeAntib(TYPE2 **antib)
-// {
-//   int i,j,k;
-
-//   for(k=0;k<diffusion_steps;k++) DiffusionFVAL(antib,diffusion_rate,1);
-
-//   //antibiotics are degraded
-//   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++){
-//     antib[i][j].fval -= degradation*antib[i][j].fval;
-//     antib[i][j].val = (antib[i][j].fval < 100)? (100+antib[i][j].fval):200;
-//     antib[i][j].val = (antib[i][j].fval<0.1)? 2: antib[i][j].val;
-//   }
-
-
-// }
 
 int Genome2genenumber(const char *seq, char gene)
 {
@@ -468,22 +395,6 @@ int Genome2genenumber(const char *seq, char gene)
   return genecount;
 }
 
-// void Replicate( int row, int col,int dir)
-// {
-//   world[row][col] = *GetNeighborP(world,row,col,dir);
-// }
-
-void Duplication(char *source, char *target, int pos, int delta)
-{
-  ;
-}
-
-void Deletion()
-{;}
-void Translocation()
-{;}
-void PointMut()
-{;}
 
 //function to reseed plane with "spores"
 void ChangeSeason(TYPE2 **world)
@@ -530,27 +441,8 @@ void ChangeSeason(TYPE2 **world)
     }
   }
 
-
-
-  // //pick spores and erase the planes
-  // for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
-  // {
-  //   if(sporenr==MAXSIZE-1) break;
-
-  //   if(world[i][j].val2 && genrand_real2()<0.01){
-  //     spores[sporenr]=world[i][j];
-  //     sporenr++;
-  //   }
-  //   //empty the plane
-  //   world[i][j].val = 0;
-  //   world[i][j].val2 = 0;
-  //   antib[i][j].val=0;
-  //   antib[i][j].val2=0;
-  //   for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
-  //   for(k=0;k<MAXSIZE;k++)
-  //   	world[i][j].seq[k]='\0';
-  // }
-
+  // printf("I got %d spores\n", actual_sporenr);
+  
   int ipos, jpos, zpos, attempt;
   //place spores
   zpos=(int)(genrand_real2()*nrow*ncol);
@@ -588,20 +480,20 @@ void ChangeSeason(TYPE2 **world)
 // because this goes to zero in zero -> epsilon + (1-epsilon)(1 - exp(-0.0001*genome_size^2))
 int Mutate(TYPE2** world, int row, int col)
 {
-  double epsilon=0.001;
-  int output=0;
+  //double epsilon=0.001;
+  //int output=0;
   TYPE2 *icell;
   icell=&world[row][col];
   //char new_seq[MAXSIZE];
-  int i,j,ipos,genome_size, which_mutations;
-  double tot_mutrate;
-  int swappos;
+  int i,j,ipos,genome_size;//, which_mutations;
+  //double tot_mutrate;
+  //int swappos;
 
   genome_size = strlen(icell->seq);
   //strcpy(new_seq,icell->seq);
 
-  int number_pos_seen = 0;
-  int gsize_before = genome_size;
+  //int number_pos_seen = 0;
+  // int gsize_before = genome_size;
 
 
   //Duplications and Deletions
@@ -685,59 +577,6 @@ int Mutate(TYPE2** world, int row, int col)
   }  
   
   
-  //fprintf(stderr,"End of mutate: val2 = %d, new genome = %s\n", icell->val2, icell->seq);
-  //if(icell->val2 == 250) fprintf(stderr,"\t\t\t\t ****     HERE    **** \n");
-
-
-  // for(ipos=0;ipos<genome_size;ipos++){
-  //   tot_mutrate = ddrate;//constant //epsilon + (1.-epsilon)*( 1. - exp(-0.0001*pow(ipos,2.)) );
-  //   //printf("%d\t tot_mutate: %f\n",ipos,tot_mutrate);
-  //   if( genrand_real2() < tot_mutrate ){
-  //     //then a mutation happens, but which one?
-  //     which_mutations = (int)(2.*genrand_real2()); //was 4.
-  //     switch(which_mutations){
-  //       //Duplications
-  //       case 0:
-  //         if(genome_size==MAXSIZE) break;
-  //         int insertpos=genome_size*genrand_real2();
-  //         char insertgene=icell->seq[ipos];
-  //         for(i=genome_size;i>insertpos;i--) icell->seq[i] = icell->seq[i-1];
-  //         icell->seq[insertpos]=insertgene;
-  //         genome_size++;
-          
-  //         ipos++;
-  //         icell->seq[genome_size]='\0';
-  //         break;
-  //       //Deletions
-  //       case 1:
-  //         if(ipos==0) output=1;
-  //         //printf("Before deletion at pos %d:%s\n",ipos,icell->seq);
-  //         for(i=ipos;i<genome_size;i++) icell->seq[i]=icell->seq[i+1];
-  //         genome_size--;
-  //         ipos--;
-  //         icell->seq[genome_size]='\0';
-  //         //printf("After deletion at pos %d:%s\n",ipos+1,icell->seq);
-  //         break;
-  //       case 2:
-  //         icell->seq[ipos]=(isupper(icell->seq[ipos]))?tolower(icell->seq[ipos]):toupper(icell->seq[ipos]);
-  //         break;
-  //       case 3:
-  //         // swappos = (ipos + (2*(int)(2*genrand_real2()))-1)%genome_size;
-  //         swappos = (int)(genome_size*genrand_real2());
-  //         char tmp = icell->seq[ipos];
-  //         icell->seq[ipos] = icell->seq[swappos];
-  //         icell->seq[swappos] = tmp;
-  //         break;
-  //       default:
-  //         fprintf(stderr, "Mutate(): Error. Got an unrecognised value for which_mutations: %d\n", which_mutations);
-  //         exit(1);
-  //     }
-
-  //   }
-  //   number_pos_seen++;
-  // }
-  // if(number_pos_seen != gsize_before) fprintf(stderr, "Mutate(): Error. Not every position was evaluated\n");
-
   return 1;
 }
 
@@ -786,36 +625,7 @@ void UpdateABproduction(int row, int col){
     }
   }
 
-  // WAS THIS. SUPER SLOW.
-  // // int howmany=0;
-  // for (i=row-MAXRADIUS; i<row+MAXRADIUS+1; i++){
-  //   for (j=col-MAXRADIUS; j<col+MAXRADIUS+1; j++){
-  //     if( sqrt((double)((i-row)*(i-row)+(j-col)*(j-col)))<=MAXRADIUS){
-  //     //  howmany++; 
-  //      if( genrand_real2()<agprod){
-  //       int found=0;
-  //       int ii=i,jj=j;
-  //       if(i<1) ii = nrow+i; 
-  //       if(i>nrow) ii = i%nrow;
-  //       if(j<1) jj = ncol+j; 
-  //       if(j>ncol) jj = j%ncol;
-  //       for (k=0; k<antib[ii][jj].val2;k++){
-  //         if(antib[ii][jj].valarray[k]==icell->val2){
-  //           found=1;
-  //           break;
-  //         }
-  //       }
-  //       if(!found){
-  //         antib[ii][jj].valarray[antib[ii][jj].val2]=icell->val2;
-  //         antib[ii][jj].val++;
-  //         antib[ii][jj].val=antib[ii][jj].val%10;  
-  //         antib[ii][jj].val2++;
-  //       }
-  //     }
-  //   }
-  // }}
-// printf("howmany = %d\n", howmany);
-// exit(1);
+  
 }
 
 int Char2Num(char c)
@@ -830,24 +640,6 @@ int Char2Num(char c)
     }
 	}
 }
-
-// int Char2Num(char c)
-// {
-// 	switch(c){
-// 		case 'G': return 0;
-// 		case 'g': return 1;
-// 		case 'A': return 2;
-// 		case 'a': return 3;
-// 		case 'R': return 4;
-// 		case 'r': return 5;
-// 		case 'P': return 6;
-// 		case 'p': return 7;
-// 		default: fprintf(stderr, "Error, character not recognised\n"), exit(1);
-// 	}
-// }
-
-
-// .... finish this tomorrow???
 char Num2Char(int c)
 {
 	switch(c){
@@ -857,34 +649,17 @@ char Num2Char(int c)
 		default: fprintf(stderr, "Num2Char(): Error, character not recognised, got number: %d\n",c), exit(1);
 	}
 }
-// char Num2Char(int c)
-// {
-// 	switch(c){
-// 		case 0: return 'G';
-// 		case 1: return 'g';
-// 		case 2: return 'A';
-// 		case 3: return 'a';
-// 		case 4: return 'R';
-// 		case 5: return 'r';
-// 		case 6: return 'P';
-// 		case 7: return 'p';
-// 		default: fprintf(stderr, "Error, character not recognised\n"), exit(1);
-// 	}
-// }
 
 
 void PrintPopStats(TYPE2 **world,TYPE2 **antib)
 {
-  int i,j,k,l,max;
-  int countG = 0;
+  int i,j,k,l;//,max;
   int countA = 0;
   int countB =0;
   int countF=0;
-  int countP = 0;
   double sumabs = 0.0;
-  char agenome[MAXSIZE];
+  // char agenome[MAXSIZE];
 	int av_genome[MAXSIZE][8] ={}; //prints consensus genome, rather than a single one
-  int countR = 0;
   int cellcount = 0;
 	
   // printf("Print nothing and return for now\n");
@@ -964,7 +739,7 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
     }
   }
   
-
+  
   
   double array[16] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
   array[0] = (float)countF/cellcount;
@@ -974,6 +749,20 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
   PlotArray(array);
 }
 
+void PrintPopFull(TYPE2 **world,TYPE2 **antib){
+  FILE *fp;
+  fp= fopen( par_fileoutput_name, "a" );
+  
+  for(int i=1;i<=nrow;i++)for(int j=1;j<=ncol;j++){
+    fprintf(fp, "%d %d %d ",Time, world[i][j].val2, antib[i][j].val2 );
+    if(world[i][j].val2 != 0) fprintf(fp,"%s " , world[i][j].seq);
+    else fprintf(fp,"n ");
+    if(antib[i][j].val2 != 0) for(int k=0;k<antib[i][j].val2;k++) fprintf(fp,"%d,",antib[i][j].valarray[k] );
+    else fprintf(fp,"0,");
+    fprintf(fp,"\n");
+  }
+  fclose(fp);
+}
 
 int GetGenomeColour(const char * seq){
     // Hash functie die doet positie^index+1 waarbij R=1, P=2, q=3 (dus die niet)
@@ -1033,6 +822,38 @@ void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R)
     }
 }
 
+int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R)
+{
+  int popcount=0;
+  
+  int i,j;
+  int **tomovie;
+  
+  tomovie=(int **)malloc( (tomovie_nrow+1)*sizeof(int*));
+  for(i=0; i<=nrow;i++) tomovie[i]=(int *)malloc( (tomovie_ncol+1)*sizeof(int));
+    
+  for(i=0;i<= tomovie_nrow ;i++)for(j=0;j<=tomovie_ncol;j++){
+    tomovie[i][j]=0;
+  }
+  
+  //here you'll save data
+  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++){
+    if(world[i][j].val!=0) popcount++;
+    tomovie[i-1][j-1 +0*(ncol)] = world[i][j].val;
+    tomovie[i-1][j-1 +1*(ncol)] = antib[i][j].val;
+    tomovie[i-1][j-1 +2*(ncol)] = G[i][j].val;
+    tomovie[i-1][j-1 +3*(ncol)] = A[i][j].val;
+    tomovie[i-1][j-1 +4*(ncol)] = R[i][j].val;
+  }
+  
+  PlanePNG(tomovie,0);
+
+  for(i=0; i<tomovie_nrow;i++) free(tomovie[i]);
+  free(tomovie);
+  
+  return popcount;
+}
+
 void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS){
   int i,j, howmany=0;
   for (i=-MAXRADIUS; i<MAXRADIUS+1; i++){
@@ -1063,57 +884,3 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
   return;
 }
 
-// Make bottleneck by reseeding pop with number of people proportional to
-// whoever was there
-// void SporulateCells(TYPE2 **world)
-// {
-// 	int i,j;
-// 	int survivors = 0;
-// 	static TYPE2 **backup=NULL;
-//     backup = New2();
-// 	backup = Copy2(backup,world); // Make backup of the plane to retry bottleneck if everyone dies
-// 	printf("Killing %f percent of cells\n",1-bottleneck);
-// 	while(1)
-// 	{
-// 		for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
-// 		{
-// 			if(world[i][j].val>0)
-// 		    {
-// 		      if(genrand_real2() < 1-bottleneck)
-// 		      {
-// 		        world[i][j].val = 0;
-// 		        world[i][j].seq[0] = '\0';
-// 		      }
-// 			  else
-// 			  {
-// 				survivors++;
-// 			  }
-// 		    }
-// 		}
-// 		if(survivors == 0) world = Copy2(world,backup);
-// 		else break;
-// 	}
-
-// 	// At least one should survive
-// }
-
-
-
-
-// void KillSensitiveCells(TYPE2 **world, TYPE2 **antib)
-// {
-// 	int i,j;
-// 	for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
-// 		if(world[i][j].val>0)
-// 		{
-//       //printf("Genome: %s\n", world[i][j].seq);
-// 			int numRgenes = Genome2genenumber(world[i][j].seq,'R');	// num R genes of this individual
-//       //printf("NumR: %d\n", numRgenes);
-// 			double death = (antib[i][j].fval/1.0 > 1.0) ? 1.0 : antib[i][j].fval/1.0; // Antibiotics increase death with a maximum of 1
-// 			if(genrand_real2() < death-numRgenes*resistance)
-//       {
-//         world[i][j].val = 0;
-//         world[i][j].seq[0] = '\0';
-//       }
-// 		}
-// }
