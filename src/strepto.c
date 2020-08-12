@@ -92,6 +92,8 @@ void Initial(void)
     if(strcmp(readOut, "-season") == 0) par_season_duration = atoi(argv_g[i+1]);
     if(strcmp(readOut, "-breakpoint_inflow") == 0) prob_new_brpoint = atof(argv_g[i+1]);
     if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
+    if(strcmp(readOut, "-maxtime") == 0) MaxTime = atoi(argv_g[i+1]);
+    
 	}
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
@@ -163,7 +165,7 @@ void InitialPlane(void)
        if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
       }
       world[i][j].seq[init_genome_size]='\0';
-      printf("Genome: %s\n", world[i][j].seq);
+      // printf("Genome: %s\n", world[i][j].seq);
       count++;
       //world[i][j].val2 = Genome2genenumber(world[i][j].seq,'G');
        UpdateABproduction(i, j);
@@ -171,7 +173,7 @@ void InitialPlane(void)
   }
   //InitialSet(world,1,0,1,0.001);
   //ReadSavedData("glidergun.sav",1,world);
-  printf("\n\nworld is ready. Let's go!\n\n");
+  fprintf(stderr,"\n\nworld is ready. Let's go!\n\n");
   Boundaries2(world);
 
 
@@ -411,7 +413,7 @@ void ChangeSeason(TYPE2 **world)
   
   //attempt 2, pick 100 spores at random
   sporenr=spore_fraction*nrow*ncol;
-  if(sporenr==0) {printf("ChangeSeason(): Error.No spores for next generation?\n"); exit(1);}
+  if(sporenr==0) {fprintf(stderr,"ChangeSeason(): Error.No spores for next generation?\n"); exit(1);}
   else if(sporenr>MAXSIZE) sporenr=MAXSIZE-1;
   int actual_sporenr=0;
   for(i=0;i<sporenr;i++){
@@ -432,7 +434,7 @@ void ChangeSeason(TYPE2 **world)
     
     }
   }
-  if(actual_sporenr==0){printf("ChangeSeason(): No spores were found for next generation? System extinct\n"); exit(1);}
+  if(actual_sporenr==0){fprintf(stderr,"ChangeSeason(): No spores were found for next generation? System extinct\n"); exit(1);}
   //erase the plane
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
   {
@@ -463,7 +465,7 @@ void ChangeSeason(TYPE2 **world)
       attempt++;
     }
     if(attempt==100){
-      printf("Error: cannot place new spore %d\n",i);
+      fprintf(stderr,"Error: cannot place new spore %d\n",i);
       exit(1);
     }else{
       world[ipos][jpos]=spores[i];
@@ -687,7 +689,7 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
 			for(k=0; world[i][j].seq[k] != '\0';k++){
         int char2num = Char2Num(world[i][j].seq[k]);
         if(char2num==-1){
-          printf("Pop stats, val2 =%d,  got garbage from genome. Time = %d, k (garbage pos)=%d, seq = %s\n" ,world[i][j].val2, Time, k, world[i][j].seq );
+          fprintf(stderr,"Pop stats, val2 =%d,  got garbage from genome. Time = %d, k (garbage pos)=%d, seq = %s\n" ,world[i][j].val2, Time, k, world[i][j].seq );
           exit(1);
         }
 				av_genome[k][ char2num ]++; // clearly the better way would be an alignment, because this mismatches positions after dup/dels
