@@ -59,6 +59,11 @@ int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are place
 int init_genome_size = 15; 
 double rscale=10.; 
 double p_movement = 0.5;
+int par_season_duration=1000;
+double ddrate=0.001; //per-gene dupdel prob
+double prob_new_brpoint = 0.01; //inflow of new randomly placed breakpoints, per replication
+double breakprob=0.01;//0.005; // probability of activating a break point
+double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 int par_movie_period = 20;
@@ -84,6 +89,9 @@ void Initial(void)
     if(strcmp(readOut, "-movie_period") == 0) par_movie_period = atoi(argv_g[i+1]);
     if(strcmp(readOut, "-data_period") == 0) par_outputdata_period = atoi(argv_g[i+1]);
     if(strcmp(readOut, "-display") == 0) display = atoi(argv_g[i+1]);
+    if(strcmp(readOut, "-season") == 0) par_season_duration = atoi(argv_g[i+1]);
+    if(strcmp(readOut, "-breakpoint_inflow") == 0) prob_new_brpoint = atof(argv_g[i+1]);
+    if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
 	}
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
@@ -357,9 +365,7 @@ void Update(void)
     }
   }
   
-  
-  int proposed_season_change=1000;
-  if(Time%proposed_season_change==0 && Time>0){
+  if(Time%par_season_duration==0 && Time>0){
     ChangeSeason(world);
   }
 
@@ -404,7 +410,7 @@ void ChangeSeason(TYPE2 **world)
   int i,j,k,row,col;
   
   //attempt 2, pick 100 spores at random
-  sporenr=0.001*nrow*ncol;
+  sporenr=spore_fraction*nrow*ncol;
   if(sporenr==0) {printf("ChangeSeason(): Error.No spores for next generation?\n"); exit(1);}
   else if(sporenr>MAXSIZE) sporenr=MAXSIZE-1;
   int actual_sporenr=0;
@@ -497,8 +503,7 @@ int Mutate(TYPE2** world, int row, int col)
 
 
   //Duplications and Deletions
-  double ddrate=0.001; //per-gene dupdel prob
-
+  
   int nrmuts=bnldev(2*ddrate,genome_size);
   int mutposarr[MAXSIZE];
   int imut;
@@ -533,7 +538,6 @@ int Mutate(TYPE2** world, int row, int col)
   }
 
   //break points
-  double breakprob=0.01;//0.005;
   int breakarray[MAXSIZE];
   int breaknr=0;
   for (ipos=0; ipos<genome_size; ipos++){
@@ -566,7 +570,6 @@ int Mutate(TYPE2** world, int row, int col)
     }
   }
   //Random break point insertion
-  double prob_new_brpoint = 0.01;
   if(genrand_real2()< prob_new_brpoint){ 
     int new_brpos=genrand_real2()*genome_size;
     char insertgene='B';
