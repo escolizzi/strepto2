@@ -77,13 +77,16 @@ void Initial(void)
 	int mynrow = 300;
   char* readOut;
   display=0;
-
+  MaxTime = 2147483647; /* default=2147483647 */
+  nrow = mynrow; /* # of row (default=100)*/
+  ncol = myncol; /* # of column (default=100)*/
+  
 	for(int i = 0; i < (int)argc_g; i++)
 	{
 	  readOut = (char*)argv_g[i];
 		if(strcmp(readOut, "-seed") == 0) myseed = atoi(argv_g[i+1]);
-		if(strcmp(readOut, "-c") == 0) myncol = atoi(argv_g[i+1]);
-		if(strcmp(readOut, "-r") == 0) mynrow = atoi(argv_g[i+1]);
+		if(strcmp(readOut, "-c") == 0) ncol = atoi(argv_g[i+1]);
+		if(strcmp(readOut, "-r") == 0) nrow = atoi(argv_g[i+1]);
     if(strcmp(readOut, "-moviedir") == 0) strcpy( par_movie_directory_name , argv_g[i+1] );
     if(strcmp(readOut, "-datafile") == 0) strcpy( par_fileoutput_name , argv_g[i+1] );
     if(strcmp(readOut, "-movie_period") == 0) par_movie_period = atoi(argv_g[i+1]);
@@ -102,9 +105,6 @@ void Initial(void)
   FILE *fp = fopen(par_fileoutput_name,"r"); 
   if(fp){ fprintf(stderr, "File %s already exists, simulation not starting\n",par_fileoutput_name); exit(1);}
 
-  MaxTime = 2147483647; /* default=2147483647 */
-  nrow = mynrow; /* # of row (default=100)*/
-  ncol = myncol; /* # of column (default=100)*/
   nplane = 5; /* # of planes (default=0)*/
   scale = 1; /* size of the window (default=2)*/
   margin=10;
