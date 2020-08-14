@@ -68,6 +68,7 @@ char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 int par_movie_period = 20;
 int par_outputdata_period = 100;
+char init_genome[MAXSIZE]; // initial genome, for specific experiments
 
 void Initial(void)
 {
@@ -80,7 +81,8 @@ void Initial(void)
   MaxTime = 2147483647; /* default=2147483647 */
   nrow = mynrow; /* # of row (default=100)*/
   ncol = myncol; /* # of column (default=100)*/
-  
+  init_genome[0]='\0';
+
 	for(int i = 0; i < (int)argc_g; i++)
 	{
 	  readOut = (char*)argv_g[i];
@@ -96,7 +98,7 @@ void Initial(void)
     if(strcmp(readOut, "-breakpoint_inflow") == 0) prob_new_brpoint = atof(argv_g[i+1]);
     if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
     if(strcmp(readOut, "-maxtime") == 0) MaxTime = atoi(argv_g[i+1]);
-    
+    if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] );init_genome_size=strlen(init_genome);}
 	}
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
@@ -156,13 +158,17 @@ void InitialPlane(void)
     {
       world[i][j].val=1+count%10;
       world[i][j].val2=1+count;
-      for(k=0;k<init_genome_size;k++){
-        // if(k<init_genome_size/2) world[i][j].seq[k]='F';
-        // else world[i][j].seq[k]='A';
-        // world[i][j].seq[0]='B';
-        // world[i][j].seq[3+init_genome_size/2]='B';
-       world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
-       if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
+      if(init_genome[0] == '\0'){
+        for(k=0;k<init_genome_size;k++){
+          // if(k<init_genome_size/2) world[i][j].seq[k]='F';
+          // else world[i][j].seq[k]='A';
+          // world[i][j].seq[0]='B';
+          // world[i][j].seq[3+init_genome_size/2]='B';
+        world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
+        if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
+        }
+      }else{
+        strcpy(world[i][j].seq,init_genome);
       }
       world[i][j].seq[init_genome_size]='\0';
       // printf("Genome: %s\n", world[i][j].seq);
