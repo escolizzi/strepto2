@@ -45,6 +45,9 @@ int tomovie_ncol;
 int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R);
 void Pause();
 
+void BreakPoint_Recombination_LeftToRight_SemiHomog(char *seq);
+void BreakPoint_Recombination_Homog(char *seq);
+void BreakPointDeletion_RightToLeft(char *seq);
 
 // Static global data structures and parameters
 static TYPE2** world;
@@ -113,7 +116,7 @@ void Initial(void)
   boundary = WRAP; /* the type of boundary: FIXED, WRAP, ECHO (default=WRAP). Note that
 		      Margolus diffusion is not supported for ECHO. */
 
-  ulseedG =myseed;// time(NULL); /* random seed ... if you don't know the time */
+  ulseedG =(myseed>0)?myseed:time(NULL);// time(NULL); /* random seed ... if you don't know the time */
   fprintf(stderr,"Seeding with time: %ld\n", ulseedG);
 
   /* useally, one does not have to change the followings */
@@ -499,7 +502,7 @@ int Mutate(TYPE2** world, int row, int col)
   TYPE2 *icell;
   icell=&world[row][col];
   //char new_seq[MAXSIZE];
-  int i,j,ipos,genome_size;//, which_mutations;
+  int i,j,genome_size;//, which_mutations;
   //double tot_mutrate;
   //int swappos;
 
@@ -544,39 +547,12 @@ int Mutate(TYPE2** world, int row, int col)
     }
     
   }
-
-  //break points
-  int breakarray[MAXSIZE];
-  int breaknr=0;
-  for (ipos=0; ipos<genome_size; ipos++){
-    if (icell->seq[ipos]=='B'){
-      breakarray[breaknr]=ipos;
-      breaknr++;
-    }
-  }
-  int b, match,lcount;
-  // notice that like this breaks happen more frequently closer to 5' than to 3'
-  //Also, one break happens, period.
-  if(breaknr>1){
-    for(b=0; b<breaknr-1; b++){
-      if(genrand_real2()<breakprob){
-        // printf("val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icell->val2, icell->seq, breakarray[b]);
-        match=b+genrand_real2()*(breaknr-b);
-        // printf("match pos = %d\n", breakarray[match]);
-        
-        // int lcount=0;
-        for(i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
-          icell->seq[ breakarray[b]+lcount ] = icell->seq[i];
-          // lcount++;
-        }
-        genome_size-= (breakarray[match] - breakarray[b]) ;
-        icell->seq[genome_size] = '\0';
-        // printf("New genome is \n%s\n", icell->seq);
-        
-        break;
-      }
-    }
-  }
+  
+  //goes from left to right, breaks are recombination mediated
+  if(0) BreakPoint_Recombination_LeftToRight_SemiHomog(icell->seq); //how it was
+  else if(1) BreakPointDeletion_RightToLeft(icell->seq); //no recomb, only 3'->5' instability
+  else if(0) BreakPoint_Recombination_Homog(icell->seq);
+  
   //Random break point insertion
   if(genrand_real2()< prob_new_brpoint){ 
     int new_brpos=genrand_real2()*genome_size;
@@ -590,6 +566,98 @@ int Mutate(TYPE2** world, int row, int col)
   
   return 1;
 }
+
+void BreakPoint_Recombination_Homog(char *seq){
+  
+  //     UNDER CONSTRUCTION --- DO NOT USE ME --- //
+  fprintf(stderr,"BreakPoint_Recombination_Homog(): Error. Function under construction");
+  exit(1);
+
+  // The whole thing is still to be constructed
+
+  //break points
+  int breakarray[MAXSIZE];
+  int breaknr=0;
+  int genome_size = strlen(seq);
+  for (int ipos=0; ipos<genome_size; ipos++){
+    if(seq[ipos]=='B'){
+      breakarray[breaknr]=ipos;
+      breaknr++;
+    }
+  }
+  int b, match;//,lcount;
+  // notice that like this breaks happen more frequently closer to 5' than to 3'
+  //Also, one break happens, period.
+  if(breaknr>1){
+    int howmany_actually_breaks = bnldev(breakprob,breaknr/2);
+    for(b=0; b<breaknr-1; b++){
+      if(genrand_real2()<breakprob){
+        // printf("val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icell->val2, icell->seq, breakarray[b]);
+        match=b+genrand_real2()*(breaknr-b);
+        // printf("match pos = %d\n", breakarray[match]);
+        
+        // int lcount=0;
+        for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
+          seq[ breakarray[b]+lcount ] = seq[i];
+          // lcount++;
+        }
+        genome_size-= (breakarray[match] - breakarray[b]) ;
+        seq[genome_size] = '\0';
+        // printf("New genome is \n%s\n", icell->seq);
+        
+        break;
+      }
+    }
+  }
+}
+
+void BreakPoint_Recombination_LeftToRight_SemiHomog(char *seq){
+  //break points
+  int breakarray[MAXSIZE];
+  int breaknr=0;
+  int genome_size = strlen(seq);
+  for (int ipos=0; ipos<genome_size; ipos++){
+    if(seq[ipos]=='B'){
+      breakarray[breaknr]=ipos;
+      breaknr++;
+    }
+  }
+  int b, match;//,lcount;
+  // notice that like this breaks happen more frequently closer to 5' than to 3'
+  //Also, one break happens, period.
+  if(breaknr>1){
+    for(b=0; b<breaknr-1; b++){
+      if(genrand_real2()<breakprob){
+        // printf("val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icell->val2, icell->seq, breakarray[b]);
+        match=b+genrand_real2()*(breaknr-b);
+        // printf("match pos = %d\n", breakarray[match]);
+        
+        // int lcount=0;
+        for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
+          seq[ breakarray[b]+lcount ] = seq[i];
+          // lcount++;
+        }
+        genome_size-= (breakarray[match] - breakarray[b]) ;
+        seq[genome_size] = '\0';
+        // printf("New genome is \n%s\n", icell->seq);
+        
+        break;
+      }
+    }
+  }
+}
+
+void BreakPointDeletion_RightToLeft(char *seq){
+  //break points
+  int genome_size = strlen(seq);
+  for (int ipos=genome_size-1; ipos>=0; ipos--){
+    if(seq[ipos]=='B' && genrand_real2()<breakprob){
+      seq[ipos]='\0';
+      break;
+    }
+  }
+}
+
 
 void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
