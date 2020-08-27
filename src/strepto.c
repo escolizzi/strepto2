@@ -117,7 +117,7 @@ void Initial(void)
 		      Margolus diffusion is not supported for ECHO. */
 
   ulseedG =(myseed>0)?myseed:time(NULL);// time(NULL); /* random seed ... if you don't know the time */
-  fprintf(stderr,"Seeding with time: %ld\n", ulseedG);
+  fprintf(stderr,"Seeding with: %ld\n", ulseedG);
 
   /* useally, one does not have to change the followings */
   /* the value of boundary (default=(TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.})*/
