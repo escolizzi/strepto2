@@ -1,10 +1,13 @@
 /*
+In this version antibiotic diversity can evolve. 
+Antibiotic are 12 bits elements, resistance depends on dist. 
+Antib are actually coded as integers. :P
+
 strepto.c, a simulation system for streptomyces evolution, based on cash.
-Bacteria have a genome made of two types of genes, 'g' and 'a'.
-g genes are needed for growth, a genes for antibiotic production.
+Bacteria have a genome made of three types of genes: 'F', 'A', 'B'.
+F genes are needed for growth, A genes for antibiotic production, B are break points.
 Bacteria live on a grid, which is TYPE2** world.
 Antibiotics are on int** antib.
-So far nothinf happen, except bacterial growth.
 */
 
 #include <stdio.h>
@@ -45,9 +48,9 @@ int tomovie_ncol;
 int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R);
 void Pause();
 
-void BreakPoint_Recombination_LeftToRight_SemiHomog(char *seq);
-void BreakPoint_Recombination_Homog(char *seq);
-void BreakPointDeletion_RightToLeft(char *seq);
+void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2 *icel);
+void BreakPoint_Recombination_Homog(TYPE2 *icel);
+void BreakPointDeletion_RightToLeft(TYPE2 *icel);
 
 // Static global data structures and parameters
 static TYPE2** world;
@@ -69,8 +72,8 @@ double breakprob=0.01;//0.005; // probability of activating a break point
 double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
-int par_movie_period = 20;
-int par_outputdata_period = 100;
+int par_movie_period = 100;
+int par_outputdata_period = 250;
 char init_genome[MAXSIZE]; // initial genome, for specific experiments
 
 void Initial(void)
@@ -169,8 +172,13 @@ void InitialPlane(void)
           // world[i][j].seq[3+init_genome_size/2]='B';
         world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
         if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
+
+        if( world[i][j].seq[k]=='A' ) world[i][j].valarray[k]=(int)( 4096* genrand_real2() ); //gives random antib type
+        else world[i][j].valarray[k]=-1;
         }
       }else{
+        fprintf(stderr,"Don't use me\n");
+        exit(1);
         strcpy(world[i][j].seq,init_genome);
       }
       world[i][j].seq[init_genome_size]='\0';
@@ -207,6 +215,38 @@ void InitialPlane(void)
   // ColorRGB(200,0,0,245);
 }
 
+//Birthrate() checks, for every antib in the field, the antib with the smallest Hamm Dist
+// then sums all these hamm dists into a final score cumhammdist
+// end returns the birthrate - a decreasing funct of cumhammdist
+double BirthRate(TYPE2 *icel, TYPE2 *ab)
+{
+  int i, k, h;
+  int hammdist, cumhammdist=0;
+  for (i=0; i<ab->val2; i++){
+    //check for each ab in the field whether individual has some resistance.
+    hammdist=999;
+    h=0;
+    for(k=0; icel->seq[k]!='\0'; k++){
+      if(icel->valarray[k]>=0){
+        int xor = icel->valarray[k] ^ ab->valarray[i];
+        h=0;
+        while (xor>0){
+          h += xor & 1;
+          xor >>= 1;
+        }
+      }
+      if(hammdist>h){
+        hammdist=h;
+      }
+    }
+    cumhammdist+=hammdist;
+
+  }
+
+  return exp(-0.3*cumhammdist*cumhammdist);
+
+}
+
 void NextState(int row,int col)
 {
   //int sum1,sum0;
@@ -235,27 +275,20 @@ void NextState(int row,int col)
       if(nei->val!=0){
         int i=0;
         int flag=0;
-        while(antib[row][col].valarray[i]!=0 && i<antib[row][col].val2){
-          if(nei->val2!=antib[row][col].valarray[i]){
-            flag=1;
-            break;
-          }
-          i++;
-        }
-        if(flag) continue;
+        double repprob=BirthRate(nei, &antib[row][col]);
         
         //check number of growth genes
         double fg=Genome2genenumber(nei->seq,'F');
-        double ag=Genome2genenumber(nei->seq,'A');
-        //cell has no genome: cannot reproduce
-        if (fg+ag==0) continue;
+        //double ag=Genome2genenumber(nei->seq,'A');
+        //cell has no fitness genes in genome: cannot reproduce
+        if (fg==0) continue;
       
         //save direction
         dirarray[counter]=k;
 
         //double ratio=fg/(fg+ag);
         double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
-        double growth=0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
+        double growth=0.1*fg/(fg+fgscale)*repprob;// was -> /(ratio+rscale));
 
         //double numgrowthgenes = Genome2genenumber(nei->seq,'G')*growthperG - Genome2genenumber(nei->seq,'p')*growthperG*1.5 - Genome2genenumber(nei->seq,'P')*growthperG*1.5 - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'); //- Genome2genenumber(nei->seq,'A')- Genome2genenumber(nei->seq,'R');
         //if(numgrowthgenes<0) numgrowthgenes=0;
@@ -306,17 +339,8 @@ void NextState(int row,int col)
   // movement + continuous antib + death if you are on it prod maybe helps?
   else if(world[row][col].val2!=0){
     int flag=0;
-    if(antib[row][col].valarray[0]!=0){ //if there are antibiotic at all, we check if those produced by focal cells are there
-      int i=0;
-      while(antib[row][col].valarray[i]!=0 && i<antib[row][col].val2){
-        if(world[row][col].val2!=antib[row][col].valarray[i]){
-          flag=1;
-          break;
-        }
-        i++;
-      }
-    }
-    if(flag){//death
+    double deathprob=1-BirthRate(&world[row][col], &antib[row][col]);
+    if(genrand_real2()<deathprob){//death
       world[row][col].val=0;
       world[row][col].val2=0;
       world[row][col].seq[0]='\0';
@@ -455,6 +479,7 @@ void ChangeSeason(TYPE2 **world)
     for(k=0;k<MAXSIZE;k++) {
       antib[i][j].valarray[k]=0;
       world[i][j].seq[k]='\0';
+      world[i][j].valarray[k]=-1;
     }
   }
 
@@ -528,19 +553,31 @@ int Mutate(TYPE2** world, int row, int col)
   
   for(imut=0; imut<nrmuts; imut++){
     int mutpos = mutposarr[imut];
-    if(genrand_real2() < 0.5) {
-      //Deletion
-      for(i=mutpos;i<genome_size;i++) icell->seq[i]=icell->seq[i+1];
+    if(genrand_real2() < 0.5){          //Deletion
+      for(i=mutpos;i<genome_size;i++){ 
+        icell->seq[i]=icell->seq[i+1];
+        icell->valarray[i]=icell->valarray[i+1];
+      }
       genome_size--;
       icell->seq[genome_size]='\0';
+      icell->valarray[genome_size]=-1;
       //update mutpos array, decrease positions that are larger than mutpos
       for(j=imut;j<nrmuts;j++) if(mutposarr[j]>mutpos) mutposarr[j]--;
-    }else{
-      //Duplication
+    }else{                             //Duplication
       int duppos=genrand_real2()*genome_size;
       char insertgene=icell->seq[mutpos];
-      for(i=genome_size;i>duppos;i--) icell->seq[i] = icell->seq[i-1];
+      int insertval = icell->valarray[mutpos];
+      for(i=genome_size;i>duppos;i--){
+        icell->seq[i] = icell->seq[i-1];
+        icell->valarray[i]=icell->valarray[i-1];
+      }
       icell->seq[duppos]=insertgene;
+      icell->valarray[duppos]=insertval; 
+      if(insertgene=='A'){
+        if(genrand_real2()<0.1){
+          icell->valarray[duppos]=icell->valarray[duppos] ^ (1<<(int)(genrand_real2()*12)); //this flips one random bit between 0 and 12( ^ is xor mask)
+        }
+      }
       genome_size++;
       icell->seq[genome_size]='\0';
       for(j=imut;j<nrmuts;j++) if(mutposarr[j]>duppos) mutposarr[j]++;
@@ -549,16 +586,20 @@ int Mutate(TYPE2** world, int row, int col)
   }
   
   //goes from left to right, breaks are recombination mediated
-  if(0) BreakPoint_Recombination_LeftToRight_SemiHomog(icell->seq); //how it was
-  else if(1) BreakPointDeletion_RightToLeft(icell->seq); //no recomb, only 3'->5' instability
-  else if(0) BreakPoint_Recombination_Homog(icell->seq);
+  if(1) BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
+  else if(0) BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
+  else if(0) BreakPoint_Recombination_Homog(icell);
   
   //Random break point insertion
   if(genrand_real2()< prob_new_brpoint){ 
     int new_brpos=genrand_real2()*genome_size;
     char insertgene='B';
-    for(i=genome_size;i>new_brpos;i--) icell->seq[i] = icell->seq[i-1];
+    for(i=genome_size;i>new_brpos;i--){ 
+      icell->seq[i] = icell->seq[i-1];
+      icell->valarray[i]=icell->valarray[i-1];
+    }
     icell->seq[new_brpos]=insertgene;
+    icell->valarray[new_brpos]=-1;
     genome_size++;
     icell->seq[genome_size]='\0';
   }  
@@ -567,51 +608,18 @@ int Mutate(TYPE2** world, int row, int col)
   return 1;
 }
 
-void BreakPoint_Recombination_Homog(char *seq){
+void BreakPoint_Recombination_Homog(TYPE2* icel){
   
   //     UNDER CONSTRUCTION --- DO NOT USE ME --- //
   fprintf(stderr,"BreakPoint_Recombination_Homog(): Error. Function under construction");
   exit(1);
 
   // The whole thing is still to be constructed
-
-  //break points
-  int breakarray[MAXSIZE];
-  int breaknr=0;
-  int genome_size = strlen(seq);
-  for (int ipos=0; ipos<genome_size; ipos++){
-    if(seq[ipos]=='B'){
-      breakarray[breaknr]=ipos;
-      breaknr++;
-    }
-  }
-  int b, match;//,lcount;
-  // notice that like this breaks happen more frequently closer to 5' than to 3'
-  //Also, one break happens, period.
-  if(breaknr>1){
-    int howmany_actually_breaks = bnldev(breakprob,breaknr/2);
-    for(b=0; b<breaknr-1; b++){
-      if(genrand_real2()<breakprob){
-        // printf("val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icell->val2, icell->seq, breakarray[b]);
-        match=b+genrand_real2()*(breaknr-b);
-        // printf("match pos = %d\n", breakarray[match]);
-        
-        // int lcount=0;
-        for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
-          seq[ breakarray[b]+lcount ] = seq[i];
-          // lcount++;
-        }
-        genome_size-= (breakarray[match] - breakarray[b]) ;
-        seq[genome_size] = '\0';
-        // printf("New genome is \n%s\n", icell->seq);
-        
-        break;
-      }
-    }
-  }
 }
 
-void BreakPoint_Recombination_LeftToRight_SemiHomog(char *seq){
+void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
+
+  char *seq=icel->seq;
   //break points
   int breakarray[MAXSIZE];
   int breaknr=0;
@@ -635,6 +643,7 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(char *seq){
         // int lcount=0;
         for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
           seq[ breakarray[b]+lcount ] = seq[i];
+          icel->valarray[ breakarray[b]+lcount ] = icel->valarray[i];
           // lcount++;
         }
         genome_size-= (breakarray[match] - breakarray[b]) ;
@@ -647,11 +656,16 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(char *seq){
   }
 }
 
-void BreakPointDeletion_RightToLeft(char *seq){
+void BreakPointDeletion_RightToLeft(TYPE2* icel){
+  char *seq=icel->seq;
+
   //break points
   int genome_size = strlen(seq);
   for (int ipos=genome_size-1; ipos>=0; ipos--){
     if(seq[ipos]=='B' && genrand_real2()<breakprob){
+      for (int k=ipos; k<MAXSIZE; k++){
+        icel->valarray[k]=-1;
+      }
       seq[ipos]='\0';
       break;
     }
@@ -674,36 +688,52 @@ void UpdateABproduction(int row, int col){
   // double ratio = ag/(fg+ag);
   double agprod=0.01*ag/(ag+agscale)*(exp(-3.*fg)); // was -> /(ratio+rscale));
   double howmany_pos_get_ab = bnldev(agprod,len_ab_poslist);
+  int which_ab[MAXSIZE];
+  int nrtypes=0;
+
+  //which ab can this individual produce?
+  int genome_length = strlen(icell->seq);
+  for (i=0; i<genome_length; i++){
+    if(icell->valarray[i]!=-1){
+      which_ab[nrtypes]=icell->valarray[i];
+      nrtypes++;
+    }
+  }
+
   //ab_poslist
   struct point tmp;
   int pos_ab_poslist;
+  //get a number of random positions from ab_poslist equal to howmany_pos_get_ab
   for(i=0; i< howmany_pos_get_ab; i++){
     pos_ab_poslist= i+(int)((len_ab_poslist-i)*genrand_real2());
     tmp = ab_poslist[pos_ab_poslist];
     ab_poslist[pos_ab_poslist] = ab_poslist[i];
     ab_poslist[i] = tmp;
   }
+  //now the first "howmany_pos_get_ab" positions in "ab_poslist" are random
   for(i=0;i<howmany_pos_get_ab;i++){
     int ii = row+ab_poslist[i].row;
     int jj = col+ab_poslist[i].col;
-    if(ii<1) ii = nrow+ii; 
-    if(ii>nrow) ii = ii%nrow;
+    if(ii<1) ii = nrow+ii;    //check for boundaries
+    else if(ii>nrow) ii = ii%nrow;
     if(jj<1) jj = ncol+jj; 
-    if(jj>ncol) jj = jj%ncol;
+    else if(jj>ncol) jj = jj%ncol;
+    
+    //pick a random ab to place
+    int ab_toplace=which_ab[(int)(nrtypes*genrand_real2())];
     int found=0;
     for (k=0; k<antib[ii][jj].val2;k++){
-      if(antib[ii][jj].valarray[k]==icell->val2){
+      if(antib[ii][jj].valarray[k]== ab_toplace){  //icell->val2){
         found=1;
         break;
       }
     }
     if(!found){
-      antib[ii][jj].valarray[antib[ii][jj].val2]=icell->val2;
+      antib[ii][jj].valarray[antib[ii][jj].val2]=ab_toplace;   //icell->val2;
       antib[ii][jj].val2++;
       antib[ii][jj].val=antib[ii][jj].val2%10;  
     }
   }
-
   
 }
 
@@ -833,11 +863,21 @@ void PrintPopFull(TYPE2 **world,TYPE2 **antib){
   fp= fopen( par_fileoutput_name, "a" );
   
   for(int i=1;i<=nrow;i++)for(int j=1;j<=ncol;j++){
-    fprintf(fp, "%d %d %d ",Time, world[i][j].val2, antib[i][j].val2 );
-    if(world[i][j].val2 != 0) fprintf(fp,"%s " , world[i][j].seq);
-    else fprintf(fp,"n ");
-    if(antib[i][j].val2 != 0) for(int k=0;k<antib[i][j].val2;k++) fprintf(fp,"%d,",antib[i][j].valarray[k] );
-    else fprintf(fp,"0,");
+    fprintf(fp, "%d %d ",Time, antib[i][j].val2 );
+    if(antib[i][j].val2){
+      for (int k=0; k<antib[i][j].val2; k++) {
+         fprintf(fp,"%d," , antib[i][j].valarray[k]);
+      }
+    }else fprintf(fp,"0,"); 
+
+    if(world[i][j].val2){
+      fprintf(fp, " %d %s ",world[i][j].val2, world[i][j].seq);
+      for (int k=0; k<strlen(world[i][j].seq); k++){
+        if(world[i][j].seq[k]=='A') fprintf(fp, "%d,",world[i][j].valarray[k]);
+      }
+    }else{
+      fprintf(fp," 0 n 0,"); 
+    }
     fprintf(fp,"\n");
   }
   fclose(fp);
