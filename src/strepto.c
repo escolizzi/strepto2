@@ -75,6 +75,7 @@ char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 int par_movie_period = 100;
 int par_outputdata_period = 250;
 char init_genome[MAXSIZE]; // initial genome, for specific experiments
+int antib_bitstring_length = 30;
 
 void Initial(void)
 {
@@ -173,7 +174,7 @@ void InitialPlane(void)
         world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
         if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
 
-        if( world[i][j].seq[k]=='A' ) world[i][j].valarray[k]=(int)( 4096* genrand_real2() ); //gives random antib type
+        if( world[i][j].seq[k]=='A' ) world[i][j].valarray[k]=(int)( pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
         else world[i][j].valarray[k]=-1;
         }
       }else{
@@ -215,36 +216,44 @@ void InitialPlane(void)
   // ColorRGB(200,0,0,245);
 }
 
-//Birthrate() checks, for every antib in the field, the antib with the smallest Hamm Dist
+void print_binary(unsigned int number){
+    if(number >> 1){
+      print_binary(number >> 1);
+    }
+    putc((number & 1) ? '1' : '0', stdout);
+}
+
+int HammingDistance(int a, int b){
+  int h=0;
+  int xor = a ^ b;
+  while (xor>0){
+    h += xor & 1;
+    xor >>= 1;
+  }
+  return h;
+}
+
+//Birthrate() checks, for every antib at the pos of an individual, the antib with the smallest Hamm Dist
 // then sums all these hamm dists into a final score cumhammdist
 // end returns the birthrate - a decreasing funct of cumhammdist
 double BirthRate(TYPE2 *icel, TYPE2 *ab)
 {
   int i, k, h;
   int hammdist, cumhammdist=0;
-  for (i=0; i<ab->val2; i++){
-    //check for each ab in the field whether individual has some resistance.
-    hammdist=999;
-    h=0;
-    for(k=0; icel->seq[k]!='\0'; k++){
-      if(icel->valarray[k]>=0){
-        int xor = icel->valarray[k] ^ ab->valarray[i];
-        h=0;
-        while (xor>0){
-          h += xor & 1;
-          xor >>= 1;
-        }
+  if(ab->val2){
+    for (i=0; i<ab->val2; i++){
+      //check for each ab in the field whether individual has some resistance.
+      hammdist=999;
+      h=0;
+      for(k=0; icel->seq[k]!='\0'; k++){
+        if(icel->seq[k]=='A') h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
+        if(hammdist>h) hammdist=h; //check if h is the smallest
       }
-      if(hammdist>h){
-        hammdist=h;
-      }
+      cumhammdist+=hammdist; // add as cumulative distance that particular distance
     }
-    cumhammdist+=hammdist;
-
   }
-
-  return exp(-0.3*cumhammdist*cumhammdist);
-
+  // return exp(-0.3*cumhammdist*cumhammdist);
+  return (cumhammdist<=1)?1.:0.;
 }
 
 void NextState(int row,int col)
@@ -288,7 +297,8 @@ void NextState(int row,int col)
 
         //double ratio=fg/(fg+ag);
         double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
-        double growth=0.1*fg/(fg+fgscale)*repprob;// was -> /(ratio+rscale));
+        
+        double growth=repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
 
         //double numgrowthgenes = Genome2genenumber(nei->seq,'G')*growthperG - Genome2genenumber(nei->seq,'p')*growthperG*1.5 - Genome2genenumber(nei->seq,'P')*growthperG*1.5 - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'); //- Genome2genenumber(nei->seq,'A')- Genome2genenumber(nei->seq,'R');
         //if(numgrowthgenes<0) numgrowthgenes=0;
@@ -338,12 +348,13 @@ void NextState(int row,int col)
   }
   // movement + continuous antib + death if you are on it prod maybe helps?
   else if(world[row][col].val2!=0){
-    int flag=0;
-    double deathprob=1-BirthRate(&world[row][col], &antib[row][col]);
+    //int flag=0;
+    double deathprob=1.-BirthRate(&world[row][col], &antib[row][col]);
     if(genrand_real2()<deathprob){//death
       world[row][col].val=0;
       world[row][col].val2=0;
       world[row][col].seq[0]='\0';
+      // fprintf(stderr,"Death\n");
     }else{
       
       UpdateABproduction(row, col);
@@ -355,7 +366,7 @@ void NextState(int row,int col)
         GetNeighborC(world, row, col, neidir, &neirow, &neicol);
         nei=&world[neirow][neicol];
         if(nei->val2==0){ //we can only move if neighbour is empty
-          flag=0;
+          //flag=0;
           // if(antib[neirow][neicol].valarray[0]!=0){ //if there are foreign ABs, we cannot move into the neighbouring pixel
           //   int i=0;
           //   while(antib[neirow][neicol].valarray[i]!=0 && i<antib[neirow][neicol].val2){
@@ -366,11 +377,12 @@ void NextState(int row,int col)
           //     i++;
           //   }
           // }
-          if(!flag && genrand_real2() < p_movement){
+          if(/*!flag &&*/ genrand_real2() < p_movement){
             *nei = world[row][col];
             world[row][col].val=0;
             world[row][col].val2=0;
             world[row][col].seq[0]='\0';
+            // fprintf(stderr,"movement from %d %d to %d %d\n", row,col, neirow, neicol);
           }
         }
 
@@ -575,7 +587,9 @@ int Mutate(TYPE2** world, int row, int col)
       icell->valarray[duppos]=insertval; 
       if(insertgene=='A'){
         if(genrand_real2()<0.1){
-          icell->valarray[duppos]=icell->valarray[duppos] ^ (1<<(int)(genrand_real2()*12)); //this flips one random bit between 0 and 12( ^ is xor mask)
+          // fprintf(stderr,"Time: %d, before,after %d, ",Time, icell->valarray[duppos]);
+          icell->valarray[duppos]=icell->valarray[duppos] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
+          // fprintf(stderr,"%d\n",icell->valarray[duppos]);
         }
       }
       genome_size++;
@@ -672,7 +686,6 @@ void BreakPointDeletion_RightToLeft(TYPE2* icel){
   }
 }
 
-
 void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
 
@@ -694,7 +707,7 @@ void UpdateABproduction(int row, int col){
   //which ab can this individual produce?
   int genome_length = strlen(icell->seq);
   for (i=0; i<genome_length; i++){
-    if(icell->valarray[i]!=-1){
+    if(icell->seq[i]=='A'){
       which_ab[nrtypes]=icell->valarray[i];
       nrtypes++;
     }
@@ -731,7 +744,7 @@ void UpdateABproduction(int row, int col){
     if(!found){
       antib[ii][jj].valarray[antib[ii][jj].val2]=ab_toplace;   //icell->val2;
       antib[ii][jj].val2++;
-      antib[ii][jj].val=antib[ii][jj].val2%10;  
+      antib[ii][jj].val=antib[ii][jj].val2%10;
     }
   }
   
