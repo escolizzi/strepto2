@@ -72,8 +72,8 @@ double breakprob=0.01;//0.005; // probability of activating a break point
 double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
-int par_movie_period = 100;
-int par_outputdata_period = 250;
+int par_movie_period = 20;
+int par_outputdata_period = 100;
 char init_genome[MAXSIZE]; // initial genome, for specific experiments
 int antib_bitstring_length = 30;
 
@@ -152,6 +152,7 @@ void InitialPlane(void)
   int i,j,k;
   int count=1;
   // Initialise the grid with a bunch of genomes
+  int antib_counter = 1;
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
   {
     world[i][j].val=0;//only for colour
@@ -165,6 +166,7 @@ void InitialPlane(void)
     {
       world[i][j].val=1+count%10;
       world[i][j].val2=1+count;
+      antib_counter += 17;
       if(init_genome[0] == '\0'){
         for(k=0;k<init_genome_size;k++){
           // if(k<init_genome_size/2) world[i][j].seq[k]='F';
@@ -174,7 +176,7 @@ void InitialPlane(void)
         world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
         if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
 
-        if( world[i][j].seq[k]=='A' ) world[i][j].valarray[k]=(int)( pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
+        if( world[i][j].seq[k]=='A' ) world[i][j].valarray[k]=(int)( /*antib_counter*/ pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
         else world[i][j].valarray[k]=-1;
         }
       }else{
@@ -246,14 +248,16 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
       hammdist=999;
       h=0;
       for(k=0; icel->seq[k]!='\0'; k++){
-        if(icel->seq[k]=='A') h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
-        if(hammdist>h) hammdist=h; //check if h is the smallest
+        if(icel->seq[k]=='A'){
+          h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
+          if(hammdist>h) hammdist=h; //check if h is the smallest
+        }
       }
       cumhammdist+=hammdist; // add as cumulative distance that particular distance
     }
   }
-  // return exp(-0.3*cumhammdist*cumhammdist);
-  return (cumhammdist<=1)?1.:0.;
+  return exp(-0.3*cumhammdist*cumhammdist);
+  //return (cumhammdist==0)?1.:0.;
 }
 
 void NextState(int row,int col)
@@ -549,6 +553,14 @@ int Mutate(TYPE2** world, int row, int col)
   //int number_pos_seen = 0;
   // int gsize_before = genome_size;
 
+  //
+  double prob_mut_antibtype = 0.05;
+  for(int i=0;icell->seq[i]!='\0';i++){
+    if(icell->seq[i]=='A'){
+      if(genrand_real2() < prob_mut_antibtype) 
+        icell->valarray[i]=icell->valarray[i] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
+    }
+  }
 
   //Duplications and Deletions
   
@@ -586,7 +598,7 @@ int Mutate(TYPE2** world, int row, int col)
       icell->seq[duppos]=insertgene;
       icell->valarray[duppos]=insertval; 
       if(insertgene=='A'){
-        if(genrand_real2()<0.1){
+        if(genrand_real2()<prob_mut_antibtype){
           // fprintf(stderr,"Time: %d, before,after %d, ",Time, icell->valarray[duppos]);
           icell->valarray[duppos]=icell->valarray[duppos] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
           // fprintf(stderr,"%d\n",icell->valarray[duppos]);
@@ -650,7 +662,11 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
   if(breaknr>1){
     for(b=0; b<breaknr-1; b++){
       if(genrand_real2()<breakprob){
-        // printf("val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icell->val2, icell->seq, breakarray[b]);
+        // printf("\n val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icel->val2, icel->seq, breakarray[b]);
+        // printf("Old antib gen:\n");
+        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
+        // printf("\n");
+
         match=b+genrand_real2()*(breaknr-b);
         // printf("match pos = %d\n", breakarray[match]);
         
@@ -662,8 +678,10 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
         }
         genome_size-= (breakarray[match] - breakarray[b]) ;
         seq[genome_size] = '\0';
-        // printf("New genome is \n%s\n", icell->seq);
-        
+        // printf("New genome is \n%s\n", icel->seq);
+        // printf("New antib gen:\n");
+        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
+        // printf("\n");
         break;
       }
     }
