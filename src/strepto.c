@@ -75,7 +75,10 @@ char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 int par_movie_period = 20;
 int par_outputdata_period = 100;
 char init_genome[MAXSIZE]; // initial genome, for specific experiments
-int antib_bitstring_length = 30;
+int antib_bitstring_length = 6;
+double h_ag=2.;
+double max_ab_prod_per_unit_time = 0.01;
+double beta_antib_tradeoff = 3.;
 
 void Initial(void)
 {
@@ -89,23 +92,27 @@ void Initial(void)
   nrow = mynrow; /* # of row (default=100)*/
   ncol = myncol; /* # of column (default=100)*/
   init_genome[0]='\0';
-
+  
 	for(int i = 0; i < (int)argc_g; i++)
 	{
 	  readOut = (char*)argv_g[i];
 		if(strcmp(readOut, "-seed") == 0) myseed = atoi(argv_g[i+1]);
-		if(strcmp(readOut, "-c") == 0) ncol = atoi(argv_g[i+1]);
-		if(strcmp(readOut, "-r") == 0) nrow = atoi(argv_g[i+1]);
-    if(strcmp(readOut, "-moviedir") == 0) strcpy( par_movie_directory_name , argv_g[i+1] );
-    if(strcmp(readOut, "-datafile") == 0) strcpy( par_fileoutput_name , argv_g[i+1] );
-    if(strcmp(readOut, "-movie_period") == 0) par_movie_period = atoi(argv_g[i+1]);
-    if(strcmp(readOut, "-data_period") == 0) par_outputdata_period = atoi(argv_g[i+1]);
-    if(strcmp(readOut, "-display") == 0) display = atoi(argv_g[i+1]);
-    if(strcmp(readOut, "-season") == 0) par_season_duration = atoi(argv_g[i+1]);
-    if(strcmp(readOut, "-breakpoint_inflow") == 0) prob_new_brpoint = atof(argv_g[i+1]);
-    if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
-    if(strcmp(readOut, "-maxtime") == 0) MaxTime = atoi(argv_g[i+1]);
-    if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] );init_genome_size=strlen(init_genome);}
+		else if(strcmp(readOut, "-c") == 0) ncol = atoi(argv_g[i+1]);
+		else if(strcmp(readOut, "-r") == 0) nrow = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-moviedir") == 0) strcpy( par_movie_directory_name , argv_g[i+1] );
+    else if(strcmp(readOut, "-datafile") == 0) strcpy( par_fileoutput_name , argv_g[i+1] );
+    else if(strcmp(readOut, "-movie_period") == 0) par_movie_period = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-data_period") == 0) par_outputdata_period = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-display") == 0) display = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-season") == 0) par_season_duration = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-breakpoint_inflow") == 0) prob_new_brpoint = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-maxtime") == 0) MaxTime = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] );init_genome_size=strlen(init_genome);}
+    else if(strcmp(readOut, "-max_ab_prod_per_unit_time") == 0) max_ab_prod_per_unit_time = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-beta_antib_tradeoff") == 0) beta_antib_tradeoff = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-antib_bitstring_length") == 0) antib_bitstring_length = atoi(argv_g[i+1]);
+    else {fprintf(stderr,"A parameter was not recognized, simulation not starting\n");exit(1);}
 	}
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
@@ -715,9 +722,8 @@ void UpdateABproduction(int row, int col){
   if (ag==0) return;
 
   //int MAXRADIUS=10;
-  double agscale=2.;
   // double ratio = ag/(fg+ag);
-  double agprod=0.01*ag/(ag+agscale)*(exp(-3.*fg)); // was -> /(ratio+rscale));
+  double agprod=max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
   double howmany_pos_get_ab = bnldev(agprod,len_ab_poslist);
   int which_ab[MAXSIZE];
   int nrtypes=0;
