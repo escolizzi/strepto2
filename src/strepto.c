@@ -62,7 +62,7 @@ static TYPE2** R;
 
 static char* AZ="FAB"; //genome alphabet
 int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
-int init_genome_size = 15; 
+int init_genome_size = 10; 
 double rscale=10.; 
 double p_movement = 0.5;
 int par_season_duration=1000;
@@ -75,10 +75,13 @@ char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 int par_movie_period = 20;
 int par_outputdata_period = 100;
 char init_genome[MAXSIZE]; // initial genome, for specific experiments
+int antib_with_bitstring=1;
 int antib_bitstring_length = 6;
+double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
 double h_ag=2.;
 double max_ab_prod_per_unit_time = 0.01;
 double beta_antib_tradeoff = 3.;
+int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 
 void Initial(void)
 {
@@ -93,7 +96,7 @@ void Initial(void)
   ncol = myncol; /* # of column (default=100)*/
   init_genome[0]='\0';
   
-	for(int i = 0; i < (int)argc_g; i++)
+	for(int i = 1; i < (int)argc_g; i++)
 	{
 	  readOut = (char*)argv_g[i];
 		if(strcmp(readOut, "-seed") == 0) myseed = atoi(argv_g[i+1]);
@@ -111,8 +114,11 @@ void Initial(void)
     else if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] );init_genome_size=strlen(init_genome);}
     else if(strcmp(readOut, "-max_ab_prod_per_unit_time") == 0) max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-beta_antib_tradeoff") == 0) beta_antib_tradeoff = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-antib_with_bitstring") == 0) antib_with_bitstring = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_bitstring_length") == 0) antib_bitstring_length = atoi(argv_g[i+1]);
-    else {fprintf(stderr,"A parameter was not recognized, simulation not starting\n");exit(1);}
+    else if(strcmp(readOut, "-par_all_vs_all_competition") == 0) par_all_vs_all_competition = atoi(argv_g[i+1]);
+    else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
+    i++;
 	}
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
@@ -130,6 +136,12 @@ void Initial(void)
   ulseedG =(myseed>0)?myseed:time(NULL);// time(NULL); /* random seed ... if you don't know the time */
   fprintf(stderr,"Seeding with: %ld\n", ulseedG);
 
+  if(!antib_with_bitstring){
+    antib_bitstring_length=1; // one antibiotic
+    prob_mut_antibtype_perbit = 0.; //which does not mutate, but should be re-assigned at the beg. of each season
+    fprintf(stderr,"No bitstrings for antibiotic, all vs all competition set to: %d\n",par_all_vs_all_competition);
+  }
+
   /* useally, one does not have to change the followings */
   /* the value of boundary (default=(TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.})*/
   boundaryvalue2 = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.};
@@ -139,7 +151,6 @@ void Initial(void)
   OpenPNG(par_movie_directory_name, tomovie_nrow, tomovie_ncol); //recall that for some weird reason you must allocate a data structure
                                                                  // of size tomovie_nrow+1 and tomovie_ncol+1, if OpenPNG gets arguments
                                                                  // tomovie_nrow and tomovie_ncol 
-  
 }
 
 void InitialPlane(void)
@@ -180,10 +191,16 @@ void InitialPlane(void)
           // else world[i][j].seq[k]='A';
           // world[i][j].seq[0]='B';
           // world[i][j].seq[3+init_genome_size/2]='B';
-        world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
+        
+        // world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
+        world[i][j].seq[k] = AZ[0];
+        if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[1];
         if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
 
-        if( world[i][j].seq[k]=='A' ) world[i][j].valarray[k]=(int)( /*antib_counter*/ pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
+        if( world[i][j].seq[k]=='A' ) {
+          if(antib_with_bitstring) world[i][j].valarray[k]=(int)( /*antib_counter*/ pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
+          else world[i][j].valarray[k]=antib_counter; //same within the same genome
+        }
         else world[i][j].valarray[k]=-1;
         }
       }else{
@@ -407,8 +424,9 @@ void NextState(int row,int col)
 void Update(void)
 {
   
+  PerfectMix(world);
   Asynchronous(); 
-
+  
   if(Time%par_movie_period==0) {
     ColourPlanes(world,G,A,R); // Pretty big speed cost here, can be fixed later
     if(display) Display(world,antib,G,A,R);
@@ -527,7 +545,11 @@ void ChangeSeason(TYPE2 **world)
     }else{
       world[ipos][jpos]=spores[i];
       //if(1+i==250) printf("val2 was %d, genome %s\n",spores[i].val2,spores[i].seq );
-      //for(k=0;k<MAXSIZE;k++) world[ipos][ipos].seq[k]=spores[i].seq[k];
+      if(!antib_with_bitstring){ 
+        if(par_all_vs_all_competition){
+          for(k=0;k<MAXSIZE;k++) if(world[ipos][ipos].seq[k]=='A')world[ipos][ipos].valarray[k] = i;
+        }
+      }
       world[ipos][jpos].val=1+i%10;
       world[ipos][jpos].val2=1+i;
       UpdateABproduction(ipos, jpos);
@@ -560,15 +582,15 @@ int Mutate(TYPE2** world, int row, int col)
   //int number_pos_seen = 0;
   // int gsize_before = genome_size;
 
-  //
-  double prob_mut_antibtype = 0.05;
-  for(int i=0;icell->seq[i]!='\0';i++){
-    if(icell->seq[i]=='A'){
-      if(genrand_real2() < prob_mut_antibtype) 
-        icell->valarray[i]=icell->valarray[i] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
+  // ANTIBIOTIC TYPE MUTATIONS
+  if(antib_with_bitstring){
+    for(int i=0;icell->seq[i]!='\0';i++){
+      if(icell->seq[i]=='A'){
+        if(genrand_real2() < prob_mut_antibtype_perbit) 
+          icell->valarray[i]=icell->valarray[i] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
+      }
     }
-  }
-
+}
   //Duplications and Deletions
   
   int nrmuts=bnldev(2*ddrate,genome_size);
@@ -604,13 +626,13 @@ int Mutate(TYPE2** world, int row, int col)
       }
       icell->seq[duppos]=insertgene;
       icell->valarray[duppos]=insertval; 
-      if(insertgene=='A'){
-        if(genrand_real2()<prob_mut_antibtype){
-          // fprintf(stderr,"Time: %d, before,after %d, ",Time, icell->valarray[duppos]);
-          icell->valarray[duppos]=icell->valarray[duppos] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
-          // fprintf(stderr,"%d\n",icell->valarray[duppos]);
-        }
-      }
+      // if(insertgene=='A'){
+      //   if(genrand_real2()<prob_mut_antibtype){
+      //     // fprintf(stderr,"Time: %d, before,after %d, ",Time, icell->valarray[duppos]);
+      //     icell->valarray[duppos]=icell->valarray[duppos] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
+      //     // fprintf(stderr,"%d\n",icell->valarray[duppos]);
+      //   }
+      // }
       genome_size++;
       icell->seq[genome_size]='\0';
       for(j=imut;j<nrmuts;j++) if(mutposarr[j]>duppos) mutposarr[j]++;
