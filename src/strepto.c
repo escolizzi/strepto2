@@ -36,7 +36,8 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
 //// Biological function declarations
 int Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this position
 void UpdateABproduction(int row, int col);        // Places new antibiotics in the field
-void ChangeSeason(TYPE2 **world);                 // "Sporulates" bacteria and restarts the field
+void ChangeSeasonMix(TYPE2 **world);                 // "Sporulates" bacteria, shuffle spore position and restarts the field
+void ChangeSeasonNoMix(TYPE2 **world);                 // "Sporulates" bacteria and restarts the field, NO spore shuffling
 
 //Printing, plotting, painting.
 void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R); 
@@ -72,16 +73,19 @@ double breakprob=0.01;//0.005; // probability of activating a break point
 double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
+char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
 int par_movie_period = 20;
 int par_outputdata_period = 100;
 char init_genome[MAXSIZE]; // initial genome, for specific experiments
-int antib_with_bitstring=1;
+int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings
 int antib_bitstring_length = 6;
 double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
 double h_ag=2.;
 double max_ab_prod_per_unit_time = 0.01;
 double beta_antib_tradeoff = 3.;
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
+double prob_noABspores_fromouterspace = 0.;
+int mix_between_seasons = 1;
 
 void Initial(void)
 {
@@ -104,6 +108,7 @@ void Initial(void)
 		else if(strcmp(readOut, "-r") == 0) nrow = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-moviedir") == 0) strcpy( par_movie_directory_name , argv_g[i+1] );
     else if(strcmp(readOut, "-datafile") == 0) strcpy( par_fileoutput_name , argv_g[i+1] );
+    else if(strcmp(readOut, "-name") == 0) strcpy( par_name , argv_g[i+1] );
     else if(strcmp(readOut, "-movie_period") == 0) par_movie_period = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-data_period") == 0) par_outputdata_period = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-display") == 0) display = atoi(argv_g[i+1]);
@@ -117,9 +122,20 @@ void Initial(void)
     else if(strcmp(readOut, "-antib_with_bitstring") == 0) antib_with_bitstring = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_bitstring_length") == 0) antib_bitstring_length = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-par_all_vs_all_competition") == 0) par_all_vs_all_competition = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) prob_noABspores_fromouterspace = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-mix_between_seasons") == 0) mix_between_seasons = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
     i++;
 	}
+  
+  if(strlen(par_name)!=0){
+    strcpy(par_fileoutput_name,"data_");
+    strcat(par_fileoutput_name,par_name);
+    strcat(par_fileoutput_name,".txt");
+    strcpy(par_movie_directory_name,"movie_");
+    strcat(par_movie_directory_name,par_name);
+    fprintf(stderr,"Output file name: %s\n Output movie dir name: %s\n",par_fileoutput_name,par_movie_directory_name);
+  }
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
   DIR *dir = opendir(par_movie_directory_name);
@@ -140,6 +156,9 @@ void Initial(void)
     antib_bitstring_length=1; // one antibiotic
     prob_mut_antibtype_perbit = 0.; //which does not mutate, but should be re-assigned at the beg. of each season
     fprintf(stderr,"No bitstrings for antibiotic, all vs all competition set to: %d\n",par_all_vs_all_competition);
+  }
+  if(prob_noABspores_fromouterspace>0.){
+    fprintf(stderr,"Probability of 'noAB' spores from outer space set to: %f\n",prob_noABspores_fromouterspace);
   }
 
   /* useally, one does not have to change the followings */
@@ -266,6 +285,7 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
 {
   int i, k, h;
   int hammdist, cumhammdist=0;
+  float birthrate;
   if(ab->val2){
     for (i=0; i<ab->val2; i++){
       //check for each ab in the field whether individual has some resistance.
@@ -280,7 +300,9 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
       cumhammdist+=hammdist; // add as cumulative distance that particular distance
     }
   }
-  return exp(-0.3*cumhammdist*cumhammdist);
+  if(!antib_with_bitstring) birthrate = (cumhammdist==0)?1.:0.;
+  else birthrate = exp(-0.3*cumhammdist*cumhammdist);
+  return birthrate;
   //return (cumhammdist==0)?1.:0.;
 }
 
@@ -424,7 +446,7 @@ void NextState(int row,int col)
 void Update(void)
 {
   
-  PerfectMix(world);
+  // PerfectMix(world);
   Asynchronous(); 
   
   if(Time%par_movie_period==0) {
@@ -442,7 +464,8 @@ void Update(void)
   }
   
   if(Time%par_season_duration==0 && Time>0){
-    ChangeSeason(world);
+    if(mix_between_seasons) ChangeSeasonMix(world);
+    else ChangeSeasonNoMix(world);
   }
 
   //while( Mouse()==0) {}; // you can run the program continuously by commenting out this statement
@@ -479,7 +502,7 @@ int Genome2genenumber(const char *seq, char gene)
 
 
 //function to reseed plane with "spores"
-void ChangeSeason(TYPE2 **world)
+void ChangeSeasonMix(TYPE2 **world)
 {
   TYPE2 spores[MAXSIZE];
   int sporenr=0;
@@ -487,7 +510,7 @@ void ChangeSeason(TYPE2 **world)
   
   //attempt 2, pick 100 spores at random
   sporenr=spore_fraction*nrow*ncol;
-  if(sporenr==0) {fprintf(stderr,"ChangeSeason(): Error.No spores for next generation?\n"); exit(1);}
+  if(sporenr==0) {fprintf(stderr,"ChangeSeasonMix(): Error.No spores for next generation?\n"); exit(1);}
   else if(sporenr>MAXSIZE) sporenr=MAXSIZE-1;
   int actual_sporenr=0;
   for(i=0;i<sporenr;i++){
@@ -508,7 +531,7 @@ void ChangeSeason(TYPE2 **world)
     
     }
   }
-  if(actual_sporenr==0){fprintf(stderr,"ChangeSeason(): No spores were found for next generation? System extinct\n"); exit(1);}
+  if(actual_sporenr==0){fprintf(stderr,"ChangeSeasonMix(): No spores were found for next generation? System extinct\n"); exit(1);}
   //erase the plane
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
   {
@@ -540,24 +563,87 @@ void ChangeSeason(TYPE2 **world)
       attempt++;
     }
     if(attempt==100){
-      fprintf(stderr,"Error: cannot place new spore %d\n",i);
+      fprintf(stderr,"ChangeSeasonMix(): Error. Cannot place new spore %d\n",i);
       exit(1);
     }else{
       world[ipos][jpos]=spores[i];
       //if(1+i==250) printf("val2 was %d, genome %s\n",spores[i].val2,spores[i].seq );
+      if(genrand_real2()<prob_noABspores_fromouterspace){
+        //instead of placing our own spores, we place an outsider, with no AB prod
+        int howmanyFfromouterspace=200;
+        for(k=0;k<howmanyFfromouterspace-1;k++) {
+          world[ipos][jpos].seq[k]='F';
+          world[ipos][jpos].valarray[k]=-1;
+        }
+        world[ipos][jpos].seq[howmanyFfromouterspace-1]='\0';
+      }
+      
       if(!antib_with_bitstring){ 
         if(par_all_vs_all_competition){
-          for(k=0;k<MAXSIZE;k++) if(world[ipos][ipos].seq[k]=='A')world[ipos][ipos].valarray[k] = i;
+          for(k=0;k<MAXSIZE;k++) if(world[ipos][jpos].seq[k]=='A')world[ipos][jpos].valarray[k] = i;
         }
       }
       world[ipos][jpos].val=1+i%10;
       world[ipos][jpos].val2=1+i;
       UpdateABproduction(ipos, jpos);
       //if(world[ipos][jpos].val2 == 250) printf("val2=250, genome %s\n",world[ipos][jpos].seq);
+    
     }
-
   }
 }
+
+//function to reseed plane with "spores"
+// without reshiffling their positions between seasons
+void ChangeSeasonNoMix(TYPE2 **world)
+{
+  int i,j,k,row,col,bactnumber=0;
+  
+  //Go through the plane
+  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++){
+    // delete the antib plane
+    antib[i][j].val=0;
+    antib[i][j].val2=0;
+    for(k=0;k<MAXSIZE;k++){
+      antib[i][j].valarray[k]=0;
+    }
+    //empty the plane - with small prob, we do not wipe this guys out, because it sporulates
+    // in other words, with high prob we wipe people out
+    if(genrand_real2() < (1. - spore_fraction) ){
+      world[i][j].val = 0;
+      world[i][j].val2 = 0;
+      for(k=0;k<MAXSIZE;k++) {
+        world[i][j].seq[k]='\0';
+        world[i][j].valarray[k]=-1;
+      }
+    }
+    else{
+      bactnumber++;
+      //with small prob we did not kill the guy, then: 
+      
+      //instead of placing our own spores, we place an outsider, with no AB prod
+      if(genrand_real2()<prob_noABspores_fromouterspace){
+        for(k=0;k<MAXSIZE-1;k++){
+          world[i][j].seq[k]='F';
+          world[i][j].valarray[k]=-1;
+        }
+        world[i][j].seq[MAXSIZE-1]='\0';
+      }
+      
+      if(!antib_with_bitstring){
+        if(par_all_vs_all_competition){
+          for(k=0;k<MAXSIZE;k++) if(world[i][j].seq[k]=='A')world[i][j].valarray[k] = bactnumber;
+        }
+      }
+      world[i][j].val = 1+bactnumber%10;
+      world[i][j].val2 =1+bactnumber;
+      UpdateABproduction(i,j);
+    }
+  }
+
+  // printf("I got %d spores\n", bactnumber);
+  
+}
+
 
 
 // What kind of mutations are possible?
@@ -590,9 +676,9 @@ int Mutate(TYPE2** world, int row, int col)
           icell->valarray[i]=icell->valarray[i] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
       }
     }
-}
-  //Duplications and Deletions
-  
+  }
+
+  //DUPLICATION AND DELETIONS
   int nrmuts=bnldev(2*ddrate,genome_size);
   int mutposarr[MAXSIZE];
   int imut;
@@ -617,6 +703,7 @@ int Mutate(TYPE2** world, int row, int col)
       //update mutpos array, decrease positions that are larger than mutpos
       for(j=imut;j<nrmuts;j++) if(mutposarr[j]>mutpos) mutposarr[j]--;
     }else{                             //Duplication
+      if(genome_size>=MAXSIZE-2) continue;
       int duppos=genrand_real2()*genome_size;
       char insertgene=icell->seq[mutpos];
       int insertval = icell->valarray[mutpos];
@@ -646,7 +733,7 @@ int Mutate(TYPE2** world, int row, int col)
   else if(0) BreakPoint_Recombination_Homog(icell);
   
   //Random break point insertion
-  if(genrand_real2()< prob_new_brpoint){ 
+  if(genome_size<MAXSIZE-2 && genrand_real2()< prob_new_brpoint){ 
     int new_brpos=genrand_real2()*genome_size;
     char insertgene='B';
     for(i=genome_size;i>new_brpos;i--){ 
