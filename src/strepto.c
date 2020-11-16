@@ -52,6 +52,7 @@ void Pause();
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2 *icel);
 void BreakPoint_Recombination_Homog(TYPE2 *icel);
 void BreakPointDeletion_RightToLeft(TYPE2 *icel);
+void BreakPointDeletion_LeftToRight(TYPE2* icel);
 
 // Static global data structures and parameters
 static TYPE2** world;
@@ -86,7 +87,7 @@ double beta_antib_tradeoff = 3.;
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 double prob_noABspores_fromouterspace = 0.;
 int mix_between_seasons = 1;
-int breakpoint_mut_type = 0; // 0: recombination, 1: telomeric deletion (strepto like)
+char breakpoint_mut_type = 'S'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 
 void Initial(void)
 {
@@ -125,7 +126,7 @@ void Initial(void)
     else if(strcmp(readOut, "-par_all_vs_all_competition") == 0) par_all_vs_all_competition = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) prob_noABspores_fromouterspace = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-mix_between_seasons") == 0) mix_between_seasons = atoi(argv_g[i+1]);
-    else if(strcmp(readOut, "-breakpoint_mut_type") == 0) breakpoint_mut_type = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-breakpoint_mut_type") == 0) breakpoint_mut_type = *(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
     i++;
 	}
@@ -730,8 +731,9 @@ int Mutate(TYPE2** world, int row, int col)
   }
   
   //goes from left to right, breaks are recombination mediated
-  if(breakpoint_mut_type==0) BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
-  else if(breakpoint_mut_type==1) BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
+  if(breakpoint_mut_type=='H') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
+  else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
+  else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);
   else{ 
     fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
     exit(1);
@@ -818,6 +820,22 @@ void BreakPointDeletion_RightToLeft(TYPE2* icel){
   for (int ipos=genome_size-1; ipos>=0; ipos--){
     if(seq[ipos]=='B' && genrand_real2()<breakprob){
       for (int k=ipos; k<MAXSIZE; k++){
+        icel->valarray[k]=-1;
+      }
+      seq[ipos]='\0';
+      break;
+    }
+  }
+}
+
+void BreakPointDeletion_LeftToRight(TYPE2* icel){
+  char *seq=icel->seq;
+
+  //break points
+  int genome_size = strlen(seq);
+  for(int ipos=0; ipos<genome_size; ipos++){
+    if(seq[ipos]=='B' && genrand_real2()<breakprob){
+      for(int k=ipos; k<MAXSIZE; k++){
         icel->valarray[k]=-1;
       }
       seq[ipos]='\0';
