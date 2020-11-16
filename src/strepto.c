@@ -27,7 +27,7 @@ Antibiotics are on int** antib.
 #include <mersenne.h>
 #include <cash2-s.h>
 
-#define MAXSIZE 256 // same as cash2.h, max size of genome
+#define MAXSIZE 1024 // same as cash2.h, max size of genome
 
 struct point *ab_poslist; //2D array used to efficiently randomize antibiotics placement
 int len_ab_poslist; //size of ab_poslist
