@@ -86,6 +86,7 @@ double beta_antib_tradeoff = 3.;
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 double prob_noABspores_fromouterspace = 0.;
 int mix_between_seasons = 1;
+int breakpoint_mut_type = 0; // 0: recombination, 1: telomeric deletion (strepto like)
 
 void Initial(void)
 {
@@ -124,10 +125,11 @@ void Initial(void)
     else if(strcmp(readOut, "-par_all_vs_all_competition") == 0) par_all_vs_all_competition = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) prob_noABspores_fromouterspace = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-mix_between_seasons") == 0) mix_between_seasons = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-breakpoint_mut_type") == 0) breakpoint_mut_type = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
     i++;
 	}
-  
+  //makes output file
   if(strlen(par_name)!=0){
     strcpy(par_fileoutput_name,"data_");
     strcat(par_fileoutput_name,par_name);
@@ -728,9 +730,13 @@ int Mutate(TYPE2** world, int row, int col)
   }
   
   //goes from left to right, breaks are recombination mediated
-  if(1) BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
-  else if(0) BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
-  else if(0) BreakPoint_Recombination_Homog(icell);
+  if(breakpoint_mut_type==0) BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
+  else if(breakpoint_mut_type==1) BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
+  else{ 
+    fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
+    exit(1);
+    if(0) BreakPoint_Recombination_Homog(icell);
+  }
   
   //Random break point insertion
   if(genome_size<MAXSIZE-2 && genrand_real2()< prob_new_brpoint){ 
