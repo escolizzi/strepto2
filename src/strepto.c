@@ -91,6 +91,7 @@ int burn_in=0;
 int par_burn_in_time=10; //this is going to be multiplied to season length
 int mix_between_seasons = 1;
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
+double par_beta_birthrate=0.3;
 
 void Initial(void)
 {
@@ -127,9 +128,10 @@ void Initial(void)
     else if(strcmp(readOut, "-antib_with_bitstring") == 0) antib_with_bitstring = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_bitstring_length") == 0) antib_bitstring_length = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-par_all_vs_all_competition") == 0) par_all_vs_all_competition = atoi(argv_g[i+1]);
-    else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) {burn_in=1;tmp_prob_noABspores_fromouterspace = atof(argv_g[i+1]);}
+    else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) tmp_prob_noABspores_fromouterspace = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-mix_between_seasons") == 0) mix_between_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-breakpoint_mut_type") == 0) breakpoint_mut_type = *(argv_g[i+1]);
+    else if(strcmp(readOut, "-beta_birthrate") == 0) par_beta_birthrate = atof(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
     i++;
 	}
@@ -164,6 +166,7 @@ void Initial(void)
     fprintf(stderr,"No bitstrings for antibiotic, all vs all competition set to: %d\n",par_all_vs_all_competition);
   }
   if(tmp_prob_noABspores_fromouterspace>0.){
+    burn_in=1;
     fprintf(stderr,"Probability of 'noAB' spores from outer space set to: %f\n",tmp_prob_noABspores_fromouterspace);
     par_burn_in_time *= par_season_duration;
     fprintf(stderr,"par_burn_in_time set to: %d\n",par_burn_in_time);
@@ -308,8 +311,8 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
       cumhammdist+=hammdist; // add as cumulative distance that particular distance
     }
   }
-  if(!antib_with_bitstring) birthrate = (cumhammdist==0)?1.:0.;
-  else birthrate = exp(-0.3*cumhammdist*cumhammdist);
+  if(!antib_with_bitstring) birthrate = (cumhammdist==0)?1.:0.; 
+  else birthrate = exp(-par_beta_birthrate*cumhammdist*cumhammdist); 
   return birthrate;
   //return (cumhammdist==0)?1.:0.;
 }
@@ -470,7 +473,7 @@ void Update(void){
         PrintPopFull(world,antib);
       }
     }
-  }else{
+  }else{ // else if burn_in == 1
     if(Time>=par_burn_in_time){
       fprintf(stderr, "Update(): message. End of burn-in\n");
       burn_in=0;
@@ -747,7 +750,7 @@ int Mutate(TYPE2** world, int row, int col)
   //goes from left to right, breaks are recombination mediated
   if(breakpoint_mut_type=='S') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
   else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
-  else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);
+  else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability
   else{ 
     fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
     exit(1);
