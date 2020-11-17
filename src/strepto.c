@@ -86,8 +86,11 @@ double max_ab_prod_per_unit_time = 0.01;
 double beta_antib_tradeoff = 3.;
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 double prob_noABspores_fromouterspace = 0.;
+double tmp_prob_noABspores_fromouterspace;
+int burn_in=0;
+int par_burn_in_time=10; //this is going to be multiplied to season length
 int mix_between_seasons = 1;
-char breakpoint_mut_type = 'S'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
+char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 
 void Initial(void)
 {
@@ -124,7 +127,7 @@ void Initial(void)
     else if(strcmp(readOut, "-antib_with_bitstring") == 0) antib_with_bitstring = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_bitstring_length") == 0) antib_bitstring_length = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-par_all_vs_all_competition") == 0) par_all_vs_all_competition = atoi(argv_g[i+1]);
-    else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) prob_noABspores_fromouterspace = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) {burn_in=1;tmp_prob_noABspores_fromouterspace = atof(argv_g[i+1]);}
     else if(strcmp(readOut, "-mix_between_seasons") == 0) mix_between_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-breakpoint_mut_type") == 0) breakpoint_mut_type = *(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
@@ -160,8 +163,10 @@ void Initial(void)
     prob_mut_antibtype_perbit = 0.; //which does not mutate, but should be re-assigned at the beg. of each season
     fprintf(stderr,"No bitstrings for antibiotic, all vs all competition set to: %d\n",par_all_vs_all_competition);
   }
-  if(prob_noABspores_fromouterspace>0.){
-    fprintf(stderr,"Probability of 'noAB' spores from outer space set to: %f\n",prob_noABspores_fromouterspace);
+  if(tmp_prob_noABspores_fromouterspace>0.){
+    fprintf(stderr,"Probability of 'noAB' spores from outer space set to: %f\n",tmp_prob_noABspores_fromouterspace);
+    par_burn_in_time *= par_season_duration;
+    fprintf(stderr,"par_burn_in_time set to: %d\n",par_burn_in_time);
   }
 
   /* useally, one does not have to change the followings */
@@ -446,26 +451,34 @@ void NextState(int row,int col)
 
 }
 
-void Update(void)
-{
+void Update(void){
   
   // PerfectMix(world);
   Asynchronous(); 
   
-  if(Time%par_movie_period==0) {
-    ColourPlanes(world,G,A,R); // Pretty big speed cost here, can be fixed later
-    if(display) Display(world,antib,G,A,R);
-    else ToMovie(world,antib,G,A,R);
-  }
-  if(Time%par_outputdata_period==0) {
-    if(display){
-      fprintf(stderr,"Time = %d\n",Time);
-      PrintPopStats(world,antib);
-    }else{
-      PrintPopFull(world,antib);
+  if(!burn_in){  
+    if(Time%par_movie_period==0){
+      ColourPlanes(world,G,A,R); // Pretty big speed cost here, can be fixed later
+      if(display) Display(world,antib,G,A,R);
+      else ToMovie(world,antib,G,A,R);
+    }
+    if(Time%par_outputdata_period==0) {
+      if(display){
+        fprintf(stderr,"Time = %d\n",Time);
+        PrintPopStats(world,antib);
+      }else{
+        PrintPopFull(world,antib);
+      }
+    }
+  }else{
+    if(Time>=par_burn_in_time){
+      fprintf(stderr, "Update(): message. End of burn-in\n");
+      burn_in=0;
+      Time=0;
+      prob_noABspores_fromouterspace = tmp_prob_noABspores_fromouterspace;   /////// OK BUT DOES THIS WORK ALSO WHEN WE DON'T WANT BURN IN?
     }
   }
-  
+
   if(Time%par_season_duration==0 && Time>0){
     if(mix_between_seasons) ChangeSeasonMix(world);
     else ChangeSeasonNoMix(world);
@@ -573,12 +586,12 @@ void ChangeSeasonMix(TYPE2 **world)
       //if(1+i==250) printf("val2 was %d, genome %s\n",spores[i].val2,spores[i].seq );
       if(genrand_real2()<prob_noABspores_fromouterspace){
         //instead of placing our own spores, we place an outsider, with no AB prod
-        int howmanyFfromouterspace=200;
-        for(k=0;k<howmanyFfromouterspace-1;k++) {
+        int howmanyFfromouterspace=100;
+        for(k=0;k<howmanyFfromouterspace;k++) {
           world[ipos][jpos].seq[k]='F';
           world[ipos][jpos].valarray[k]=-1;
         }
-        world[ipos][jpos].seq[howmanyFfromouterspace-1]='\0';
+        world[ipos][jpos].seq[howmanyFfromouterspace]='\0';
       }
       
       if(!antib_with_bitstring){ 
@@ -625,11 +638,12 @@ void ChangeSeasonNoMix(TYPE2 **world)
       
       //instead of placing our own spores, we place an outsider, with no AB prod
       if(genrand_real2()<prob_noABspores_fromouterspace){
-        for(k=0;k<MAXSIZE-1;k++){
+        int howmanyFfromouterspace =100;
+        for(k=0;k<howmanyFfromouterspace;k++){
           world[i][j].seq[k]='F';
           world[i][j].valarray[k]=-1;
         }
-        world[i][j].seq[MAXSIZE-1]='\0';
+        world[i][j].seq[howmanyFfromouterspace]='\0';
       }
       
       if(!antib_with_bitstring){
@@ -731,7 +745,7 @@ int Mutate(TYPE2** world, int row, int col)
   }
   
   //goes from left to right, breaks are recombination mediated
-  if(breakpoint_mut_type=='H') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
+  if(breakpoint_mut_type=='S') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
   else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
   else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);
   else{ 
