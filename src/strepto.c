@@ -92,6 +92,9 @@ int par_burn_in_time=10; //this is going to be multiplied to season length
 int mix_between_seasons = 1;
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 double par_beta_birthrate=0.3;
+int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
+double prob_mut_antibtype_tot = 0.1;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
+                                        // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
 
 void Initial(void)
 {
@@ -132,6 +135,7 @@ void Initial(void)
     else if(strcmp(readOut, "-mix_between_seasons") == 0) mix_between_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-breakpoint_mut_type") == 0) breakpoint_mut_type = *(argv_g[i+1]);
     else if(strcmp(readOut, "-beta_birthrate") == 0) par_beta_birthrate = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-const_tot_ab_mut") == 0) const_tot_ab_mut = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
     i++;
 	}
@@ -159,6 +163,10 @@ void Initial(void)
 
   ulseedG =(myseed>0)?myseed:time(NULL);// time(NULL); /* random seed ... if you don't know the time */
   fprintf(stderr,"Seeding with: %ld\n", ulseedG);
+  
+  if(const_tot_ab_mut){
+    prob_mut_antibtype_perbit = prob_mut_antibtype_tot/(double)(antib_bitstring_length);
+  }
 
   if(!antib_with_bitstring){
     antib_bitstring_length=1; // one antibiotic
