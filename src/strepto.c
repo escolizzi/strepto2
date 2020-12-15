@@ -82,7 +82,7 @@ int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bit
 int antib_bitstring_length = 6;
 double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
 double h_ag=2.;
-double max_ab_prod_per_unit_time = 0.01;
+double max_ab_prod_per_unit_time = -1.; // set either by command line argument, or as 1/len_ab_pos
 double beta_antib_tradeoff = 3.;
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 double prob_noABspores_fromouterspace = 0.;
@@ -198,6 +198,8 @@ void InitialPlane(void)
   MakePlane(&world,&antib,&G,&A,&R);
 
   InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS);
+  if(max_ab_prod_per_unit_time<0.) max_ab_prod_per_unit_time = 1/(double)len_ab_pos;
+
   // for(int i=0; i<len_ab_poslist;i++) printf("%d %d\n",ab_poslist[i].row,ab_poslist[i].col);
   // exit(1);
   /* InitialSet(1,2,3,4,5)
@@ -359,7 +361,7 @@ void NextState(int row,int col)
         
         //check number of growth genes
         double fg=Genome2genenumber(nei->seq,'F');
-        //double ag=Genome2genenumber(nei->seq,'A');
+        double ag=Genome2genenumber(nei->seq,'A');
         //cell has no fitness genes in genome: cannot reproduce
         if (fg==0) continue;
       
@@ -368,8 +370,10 @@ void NextState(int row,int col)
 
         //double ratio=fg/(fg+ag);
         double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
+        double regulation_growth = fg/(fg+fgscale);
+        double regulation_antib  = ag/(ag+fgscale);
         
-        double growth=repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
+        double growth = 0.1*regulation_growth/(regulation_growth+regulation_antib+0.1); // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
 
         //double numgrowthgenes = Genome2genenumber(nei->seq,'G')*growthperG - Genome2genenumber(nei->seq,'p')*growthperG*1.5 - Genome2genenumber(nei->seq,'P')*growthperG*1.5 - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'); //- Genome2genenumber(nei->seq,'A')- Genome2genenumber(nei->seq,'R');
         //if(numgrowthgenes<0) numgrowthgenes=0;
@@ -883,7 +887,13 @@ void UpdateABproduction(int row, int col){
 
   //int MAXRADIUS=10;
   // double ratio = ag/(fg+ag);
-  double agprod=max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
+  
+  double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
+  double regulation_growth = fg/(fg+fgscale);
+  double regulation_antib  = ag/(ag+fgscale);
+
+  double agprod= max_ab_prod_per_unit_time*regulation_antib/(regulation_growth+regulation_antib+0.1);//was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
+  
   double howmany_pos_get_ab = bnldev(agprod,len_ab_poslist);
   int which_ab[MAXSIZE];
   int nrtypes=0;
