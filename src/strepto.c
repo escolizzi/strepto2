@@ -93,7 +93,7 @@ int mix_between_seasons = 1;
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 double par_beta_birthrate=0.3;
 int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
-double prob_mut_antibtype_tot = 0.1;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
+double prob_mut_antibtype_tot = 0.05;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
 
 void Initial(void)
