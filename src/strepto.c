@@ -22,10 +22,10 @@ Antibiotics are on int** antib.
 #include <limits.h>
 #include <signal.h>
 #include <dirent.h>
-#include <cash2003.h>
-#include <cash2.h>
-#include <mersenne.h>
-#include <cash2-s.h>
+#include "cash2003.h"
+#include "cash2.h"
+#include "mersenne.h"
+#include "cash2-s.h"
 
 #define MAXSIZE 1024 // same as cash2.h, max size of genome
 
@@ -130,6 +130,7 @@ void Initial(void)
     else if(strcmp(readOut, "-beta_antib_tradeoff") == 0) beta_antib_tradeoff = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_with_bitstring") == 0) antib_with_bitstring = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_bitstring_length") == 0) antib_bitstring_length = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-prob_mut_antibtype_perbit") == 0) prob_mut_antibtype_perbit = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-par_all_vs_all_competition") == 0) par_all_vs_all_competition = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-prob_noABspores_fromouterspace") == 0) tmp_prob_noABspores_fromouterspace = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-mix_between_seasons") == 0) mix_between_seasons = atoi(argv_g[i+1]);
@@ -166,6 +167,7 @@ void Initial(void)
   
   if(const_tot_ab_mut){
     prob_mut_antibtype_perbit = prob_mut_antibtype_tot/(double)(antib_bitstring_length);
+    fprintf(stderr,"Constant per AB mut rate used, prob_mut_antibtype_perbit reset to %f\n", prob_mut_antibtype_perbit);
   }
 
   if(!antib_with_bitstring){
