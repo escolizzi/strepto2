@@ -86,7 +86,7 @@ double max_ab_prod_per_unit_time = -1.; // set either by command line argument, 
 double beta_antib_tradeoff = 3.;
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 double prob_noABspores_fromouterspace = 0.;
-double tmp_prob_noABspores_fromouterspace;
+double tmp_prob_noABspores_fromouterspace=-1.;
 int burn_in=0;
 int par_burn_in_time=10; //this is going to be multiplied to season length
 int mix_between_seasons = 1;
@@ -245,6 +245,9 @@ void InitialPlane(void)
         }
         else world[i][j].valarray[k]=-1;
         }
+        world[i][j].val3=Genome2genenumber(world[i][j].seq,'F');
+        world[i][j].val4=Genome2genenumber(world[i][j].seq,'A');
+        world[i][j].val5=Genome2genenumber(world[i][j].seq,'B');
       }else{
         fprintf(stderr,"Don't use me\n");
         exit(1);
@@ -255,6 +258,7 @@ void InitialPlane(void)
       count++;
       //world[i][j].val2 = Genome2genenumber(world[i][j].seq,'G');
        UpdateABproduction(i, j);
+
     }
   }
   //InitialSet(world,1,0,1,0.001);
