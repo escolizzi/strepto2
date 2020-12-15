@@ -43,7 +43,7 @@ void ChangeSeasonNoMix(TYPE2 **world);                 // "Sporulates" bacteria 
 void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R); 
 int Genome2genenumber(const char *seq, char gene);  // Convert genome to int of number of genes equal to char gene
 void PrintPopStats(TYPE2 **world, TYPE2 **antib);
-void PrintPopFull(TYPE2 **world,TYPE2 **antib);
+int PrintPopFull(TYPE2 **world,TYPE2 **antib);
 int tomovie_nrow;
 int tomovie_ncol;
 int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R);
@@ -471,8 +471,8 @@ void NextState(int row,int col)
 
 }
 
+int n_antib;
 void Update(void){
-  
   // PerfectMix(world);
   Asynchronous(); 
   
@@ -487,7 +487,11 @@ void Update(void){
         fprintf(stderr,"Time = %d\n",Time);
         PrintPopStats(world,antib);
       }else{
-        PrintPopFull(world,antib);
+        n_antib=PrintPopFull(world,antib);
+        if(n_antib==0){
+          fprintf(stderr,"No antibiotic genes in the field, the simulation will terminate\n");
+          exit(1);
+        }
       }
     }
   }else{ // else if burn_in == 1
@@ -980,7 +984,7 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
   // char agenome[MAXSIZE];
 	int av_genome[MAXSIZE][8] ={}; //prints consensus genome, rather than a single one
   int cellcount = 0;
-	
+
   // printf("Print nothing and return for now\n");
   // return;
 
@@ -993,9 +997,9 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
       cellcount++;
       // countG += Genome2genenumber(world[i][j].seq,'G');
       // countR += Genome2genenumber(world[i][j].seq,'R');
-      countF += Genome2genenumber(world[i][j].seq,'F');
-      countA += Genome2genenumber(world[i][j].seq,'A');
-      countB += Genome2genenumber(world[i][j].seq,'B');
+      countF += world[i][j].val3; //Genome2genenumber(world[i][j].seq,'F');
+      countA += world[i][j].val4; //Genome2genenumber(world[i][j].seq,'A');
+      countB += world[i][j].val5; //Genome2genenumber(world[i][j].seq,'B');
       
       // countP += Genome2genenumber(world[i][j].seq,'p');
       // countP += Genome2genenumber(world[i][j].seq,'P');
@@ -1068,10 +1072,12 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
   PlotArray(array);
 }
 
-void PrintPopFull(TYPE2 **world,TYPE2 **antib){
+//returns tot_antib_genes
+int PrintPopFull(TYPE2 **world,TYPE2 **antib){
   FILE *fp;
   fp= fopen( par_fileoutput_name, "a" );
-  
+  int tot_antib_genes=0; //if this number == 0 only fitness genes... kinda pointless to go on with the sim
+
   for(int i=1;i<=nrow;i++)for(int j=1;j<=ncol;j++){
     fprintf(fp, "%d %d ",Time, antib[i][j].val2 );
     if(antib[i][j].val2){
@@ -1081,6 +1087,7 @@ void PrintPopFull(TYPE2 **world,TYPE2 **antib){
     }else fprintf(fp,"0,"); 
 
     if(world[i][j].val2){
+      tot_antib_genes+=world[i][j].val4;
       fprintf(fp, " %d %s ",world[i][j].val2, world[i][j].seq);
       for (int k=0; k<strlen(world[i][j].seq); k++){
         if(world[i][j].seq[k]=='A') fprintf(fp, "%d,",world[i][j].valarray[k]);
@@ -1091,6 +1098,7 @@ void PrintPopFull(TYPE2 **world,TYPE2 **antib){
     fprintf(fp,"\n");
   }
   fclose(fp);
+  return tot_antib_genes;
 }
 
 int GetGenomeColour(const char * seq){
