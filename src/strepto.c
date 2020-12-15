@@ -198,7 +198,7 @@ void InitialPlane(void)
   MakePlane(&world,&antib,&G,&A,&R);
 
   InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS);
-  if(max_ab_prod_per_unit_time<0.) max_ab_prod_per_unit_time = 1/(double)len_ab_pos;
+  if(max_ab_prod_per_unit_time<0.) max_ab_prod_per_unit_time = 1/(double)len_ab_poslist;
 
   // for(int i=0; i<len_ab_poslist;i++) printf("%d %d\n",ab_poslist[i].row,ab_poslist[i].col);
   // exit(1);
@@ -360,8 +360,8 @@ void NextState(int row,int col)
         double repprob=BirthRate(nei, &antib[row][col]);
         
         //check number of growth genes
-        double fg=Genome2genenumber(nei->seq,'F');
-        double ag=Genome2genenumber(nei->seq,'A');
+        double fg=nei->val3; //Genome2genenumber(nei->seq,'F');
+        double ag=nei->val4; //Genome2genenumber(nei->seq,'A');
         //cell has no fitness genes in genome: cannot reproduce
         if (fg==0) continue;
       
@@ -373,8 +373,8 @@ void NextState(int row,int col)
         double regulation_growth = fg/(fg+fgscale);
         double regulation_antib  = ag/(ag+fgscale);
         
-        double growth = 0.1*regulation_growth/(regulation_growth+regulation_antib+0.1); // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
-
+        double growth = repprob*0.1*regulation_growth/(regulation_growth+regulation_antib+0.1); // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
+        
         //double numgrowthgenes = Genome2genenumber(nei->seq,'G')*growthperG - Genome2genenumber(nei->seq,'p')*growthperG*1.5 - Genome2genenumber(nei->seq,'P')*growthperG*1.5 - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'); //- Genome2genenumber(nei->seq,'A')- Genome2genenumber(nei->seq,'R');
         //if(numgrowthgenes<0) numgrowthgenes=0;
         // printf("Fitness: \t%f, fit wo p: %f\n", numgrowthgenes, Genome2genenumber(nei->seq,'G')*growthperG - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A') );
@@ -413,6 +413,9 @@ void NextState(int row,int col)
         //   ;
         //   //printf("Hello\n");
         }
+        world[row][col].val3=Genome2genenumber(nei->seq,'F');
+        world[row][col].val4=Genome2genenumber(nei->seq,'A');
+        world[row][col].val5=Genome2genenumber(nei->seq,'B');
         // printf("Hello 3\n");
         UpdateABproduction(row, col);
         // printf("Hello 4\n");
@@ -880,8 +883,8 @@ void UpdateABproduction(int row, int col){
 
   int i,k;
   //check number of growth genes
-  double fg=Genome2genenumber(icell->seq,'F');
-  double ag=Genome2genenumber(icell->seq,'A');
+  double fg=icell->val3; // Genome2genenumber(icell->seq,'F');
+  double ag=icell->val4; // Genome2genenumber(icell->seq,'A');
   //cell has no genome: cannot reproduce
   if (ag==0) return;
 
