@@ -62,7 +62,7 @@ static TYPE2** A;
 static TYPE2** R;
 //static TYPE2 empty = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.,{'\0'},{'\0'}};
 
-static char* AZ="FAB"; //genome alphabet
+static char* AZ="HFAB"; //genome alphabet
 int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
 int init_genome_size = 10; 
 double rscale=10.; 
@@ -95,6 +95,7 @@ double par_beta_birthrate=0.3;
 int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
 double prob_mut_antibtype_tot = 0.05;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
+int nr_H_genes_to_stay_alive=5;
 
 void Initial(void)
 {
@@ -228,16 +229,17 @@ void InitialPlane(void)
       world[i][j].val2=1+count;
       antib_counter += 17;
       if(init_genome[0] == '\0'){
-        for(k=0;k<init_genome_size;k++){
+        for(k=0;k<init_genome_size+nr_H_genes_to_stay_alive;k++){
           // if(k<init_genome_size/2) world[i][j].seq[k]='F';
           // else world[i][j].seq[k]='A';
           // world[i][j].seq[0]='B';
           // world[i][j].seq[3+init_genome_size/2]='B';
         
         // world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
-        world[i][j].seq[k] = AZ[0];
-        if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[1];
-        if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; //give break points only once in a while  
+        world[i][j].seq[k] = AZ[ (int)( 2*genrand_real2() ) ]; //growth genes and homeost.
+        // if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[0]; // homeost.
+        if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; // antib
+        if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[3]; // give break points only once in a while  
 
         if( world[i][j].seq[k]=='A' ) {
           if(antib_with_bitstring) world[i][j].valarray[k]=(int)( /*antib_counter*/ pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
@@ -247,13 +249,13 @@ void InitialPlane(void)
         }
         world[i][j].val3=Genome2genenumber(world[i][j].seq,'F');
         world[i][j].val4=Genome2genenumber(world[i][j].seq,'A');
-        world[i][j].val5=Genome2genenumber(world[i][j].seq,'B');
+        world[i][j].val5=Genome2genenumber(world[i][j].seq,'H');
       }else{
         fprintf(stderr,"Don't use me\n");
         exit(1);
         strcpy(world[i][j].seq,init_genome);
       }
-      world[i][j].seq[init_genome_size]='\0';
+      world[i][j].seq[init_genome_size+nr_H_genes_to_stay_alive]='\0';
       // printf("Genome: %s\n", world[i][j].seq);
       count++;
       //world[i][j].val2 = Genome2genenumber(world[i][j].seq,'G');
@@ -361,13 +363,14 @@ void NextState(int row,int col)
       if(nei->val!=0){
         int i=0;
         int flag=0;
-        double repprob=BirthRate(nei, &antib[row][col]);
+        
+        double repprob= ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]);
         
         //check number of growth genes
         double fg=nei->val3; //Genome2genenumber(nei->seq,'F');
         double ag=nei->val4; //Genome2genenumber(nei->seq,'A');
         //cell has no fitness genes in genome: cannot reproduce
-        if (fg==0) continue;
+        if (fg==0 || repprob==0) continue;
       
         //save direction
         dirarray[counter]=k;
@@ -419,7 +422,7 @@ void NextState(int row,int col)
         }
         world[row][col].val3=Genome2genenumber(nei->seq,'F');
         world[row][col].val4=Genome2genenumber(nei->seq,'A');
-        world[row][col].val5=Genome2genenumber(nei->seq,'B');
+        world[row][col].val5=Genome2genenumber(nei->seq,'H');
         // printf("Hello 3\n");
         UpdateABproduction(row, col);
         // printf("Hello 4\n");
@@ -431,7 +434,9 @@ void NextState(int row,int col)
   // movement + continuous antib + death if you are on it prod maybe helps?
   else if(world[row][col].val2!=0){
     //int flag=0;
-    double deathprob=1.-BirthRate(&world[row][col], &antib[row][col]);
+    double deathprob;
+    deathprob = ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 1. : 1.-BirthRate(&world[row][col], &antib[row][col]); //no H genes you die
+
     if(genrand_real2()<deathprob){//death
       world[row][col].val=0;
       world[row][col].val2=0;
@@ -984,6 +989,7 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
   int countA = 0;
   int countB =0;
   int countF=0;
+  int countH=0;
   double sumabs = 0.0;
   // char agenome[MAXSIZE];
 	int av_genome[MAXSIZE][8] ={}; //prints consensus genome, rather than a single one
@@ -1003,8 +1009,9 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
       // countR += Genome2genenumber(world[i][j].seq,'R');
       countF += world[i][j].val3; //Genome2genenumber(world[i][j].seq,'F');
       countA += world[i][j].val4; //Genome2genenumber(world[i][j].seq,'A');
-      countB += world[i][j].val5; //Genome2genenumber(world[i][j].seq,'B');
-      
+      countB += Genome2genenumber(world[i][j].seq,'B');
+      countH += world[i][j].val5; //Genome2genenumber(world[i][j].seq,'B');
+
       // countP += Genome2genenumber(world[i][j].seq,'p');
       // countP += Genome2genenumber(world[i][j].seq,'P');
       //strcpy(agenome,world[i][j].seq);
