@@ -237,8 +237,8 @@ void InitialPlane(void)
           // world[i][j].seq[3+init_genome_size/2]='B';
         
         // world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
-        world[i][j].seq[k] = AZ[ (int)( 2*genrand_real2() ) ]; //growth genes and homeost.
-        // if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[0]; // homeost.
+        if(nr_H_genes_to_stay_alive>0) world[i][j].seq[k] = AZ[ (int)( 2*genrand_real2() ) ]; //growth genes and homeost.
+        else world[i][j].seq[k] = AZ[1]; //if no homeost genes needed -> we put none
         if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; // antib
         if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[3]; // give break points only once in a while  
 
