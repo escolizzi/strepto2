@@ -375,7 +375,7 @@ void NextState(int row,int col)
         //double ratio=fg/(fg+ag);
         double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
         double regulation_growth = fg/(fg+fgscale);
-        double regulation_antib  = ag/(ag+fgscale);
+        double regulation_antib  = ag/(ag+fgscale) - regulation_growth; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
         
         double growth = repprob*0.1*regulation_growth/(regulation_growth+regulation_antib+0.1); // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
 
@@ -901,7 +901,7 @@ void UpdateABproduction(int row, int col){
   
   double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
   double regulation_growth = fg/(fg+fgscale);
-  double regulation_antib  = ag/(ag+fgscale);
+  double regulation_antib  = ag/(ag+fgscale) - regulation_growth; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
 
   double agprod= max_ab_prod_per_unit_time*regulation_antib/(regulation_growth+regulation_antib+0.1);//was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
   
