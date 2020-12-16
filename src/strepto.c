@@ -95,7 +95,8 @@ double par_beta_birthrate=0.3;
 int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
 double prob_mut_antibtype_tot = 0.05;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
-int nr_H_genes_to_stay_alive=5;
+int nr_H_genes_to_stay_alive=0;
+int n_exponent_regulation=2;
 
 void Initial(void)
 {
@@ -376,7 +377,9 @@ void NextState(int row,int col)
         dirarray[counter]=k;
 
         //double ratio=fg/(fg+ag);
-        double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
+        double fgscale=pow(3.,n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
+        fg = pow(fg,n_exponent_regulation); //squared gives a steeper sigmoid funct :P
+        ag = pow(ag,n_exponent_regulation);
         double regulation_growth = fg/(fg+fgscale);
         double regulation_antib  = ag/(ag+fgscale) - regulation_growth; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
         
@@ -904,7 +907,9 @@ void UpdateABproduction(int row, int col){
   //int MAXRADIUS=10;
   // double ratio = ag/(fg+ag);
   
-  double fgscale=3.; //with 1 it was doing interesting things, with 5 ab production never happened
+  double fgscale=pow(3.,n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
+  fg = pow(fg,n_exponent_regulation); //squared gives a steeper sigmoid funct :P
+  ag = pow(ag,n_exponent_regulation);
   double regulation_growth = fg/(fg+fgscale);
   double regulation_antib  = ag/(ag+fgscale) - regulation_growth; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
 
