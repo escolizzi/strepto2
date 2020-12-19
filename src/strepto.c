@@ -252,9 +252,28 @@ void InitialPlane(void)
         }
         else world[i][j].valarray[k]=-1;
         }
+        
+        // SET GROWTH AND AB PRODUCTION PARAMETERS
         world[i][j].val3=Genome2genenumber(world[i][j].seq,'F');
         world[i][j].val4=Genome2genenumber(world[i][j].seq,'A');
         world[i][j].val5=Genome2genenumber(world[i][j].seq,'H');
+
+        double fg=pow( world[i][j].val3 , n_exponent_regulation); //Genome2genenumber(nei->seq,'F');
+        double ag=pow( world[i][j].val4 , n_exponent_regulation); //Genome2genenumber(nei->seq,'A');
+        
+        double fgscale=pow( h_growth, n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
+        double agscale=pow( h_antib_act, n_exponent_regulation);
+        double fgscale_inhib_a=pow( h_antib_inhib, n_exponent_regulation);
+        
+        double regulation_growth = fg/(fg+fgscale);
+        double inhib_antib = fg/(fg+fgscale_inhib_a);
+        double regulation_antib  = ag/(ag+agscale) - inhib_antib; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
+        
+        double tot_growth = regulation_growth+regulation_antib+0.1;
+
+        world[i][j].fval3 = 0.1*regulation_growth/tot_growth;                         // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
+        world[i][j].fval4 = max_ab_prod_per_unit_time*regulation_antib/tot_growth;    //was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
+
       }else{
         fprintf(stderr,"Don't use me\n");
         exit(1);
