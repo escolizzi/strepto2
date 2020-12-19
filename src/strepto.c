@@ -97,6 +97,9 @@ double prob_mut_antibtype_tot = 0.05;    // prob_mut_antibtype_tot is used inste
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
 int nr_H_genes_to_stay_alive=0;
 int n_exponent_regulation=2;
+double h_growth=10.;
+double h_antib_act=3.;
+double h_antib_inhib=2.;
 
 void Initial(void)
 {
@@ -367,24 +370,14 @@ void NextState(int row,int col)
         
         double repprob= ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]);
         
-        //check number of growth genes
-        double fg=nei->val3; //Genome2genenumber(nei->seq,'F');
-        double ag=nei->val4; //Genome2genenumber(nei->seq,'A');
         //cell has no fitness genes in genome: cannot reproduce
-        if (fg==0 || repprob==0) continue;
+        if (world[row][col].val3==0 || repprob<=0.000000000001) continue;
       
         //save direction
         dirarray[counter]=k;
 
-        //double ratio=fg/(fg+ag);
-        double fgscale=pow(3.,n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
-        fg = pow(fg,n_exponent_regulation); //squared gives a steeper sigmoid funct :P
-        ag = pow(ag,n_exponent_regulation);
-        double regulation_growth = fg/(fg+fgscale);
-        double regulation_antib  = ag/(ag+fgscale) - regulation_growth; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
+        double growth = repprob * world[row][col].fval3;
         
-        double growth = repprob*0.1*regulation_growth/(regulation_growth+regulation_antib+0.1); // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
-
         //double numgrowthgenes = Genome2genenumber(nei->seq,'G')*growthperG - Genome2genenumber(nei->seq,'p')*growthperG*1.5 - Genome2genenumber(nei->seq,'P')*growthperG*1.5 - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'); //- Genome2genenumber(nei->seq,'A')- Genome2genenumber(nei->seq,'R');
         //if(numgrowthgenes<0) numgrowthgenes=0;
         // printf("Fitness: \t%f, fit wo p: %f\n", numgrowthgenes, Genome2genenumber(nei->seq,'G')*growthperG - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A') );
@@ -423,11 +416,29 @@ void NextState(int row,int col)
         //   ;
         //   //printf("Hello\n");
         }
+
+        // UPON BIRTH WE SET A BUNCH OF PARAMETERS
         world[row][col].val3=Genome2genenumber(nei->seq,'F');
         world[row][col].val4=Genome2genenumber(nei->seq,'A');
         world[row][col].val5=Genome2genenumber(nei->seq,'H');
-        // printf("Hello 3\n");
-        UpdateABproduction(row, col);
+        
+        double fg=pow( world[row][col].val3 , n_exponent_regulation); //Genome2genenumber(nei->seq,'F');
+        double ag=pow( world[row][col].val4 , n_exponent_regulation); //Genome2genenumber(nei->seq,'A');
+        
+        double fgscale=pow( h_growth, n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
+        double agscale=pow( h_antib_act, n_exponent_regulation);
+        double fgscale_inhib_a=pow( h_antib_inhib, n_exponent_regulation);
+        
+        double regulation_growth = fg/(fg+fgscale);
+        double inhib_antib = fg/(fg+fgscale_inhib_a);
+        double regulation_antib  = ag/(ag+agscale) - inhib_antib; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
+        
+        double tot_growth = regulation_growth+regulation_antib+0.1;
+
+        world[row][col].fval3 = 0.1*regulation_growth/tot_growth;                         // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
+        world[row][col].fval4 = max_ab_prod_per_unit_time*regulation_antib/tot_growth;    //was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
+        
+        // UpdateABproduction(row, col); // NO AB PROD AS SOON AS YOU ARE BORN <---- IMPORTANT DIFFERENCE (? IS IT THOUGH???)
         // printf("Hello 4\n");
 
       }
@@ -898,24 +909,9 @@ void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
 
   int i,k;
-  //check number of growth genes
-  double fg=icell->val3; // Genome2genenumber(icell->seq,'F');
-  double ag=icell->val4; // Genome2genenumber(icell->seq,'A');
-  //cell has no genome: cannot reproduce
-  if (ag==0) return;
+  if( icell->val4==0 || icell->fval4<0.000000000001) return;//if you don't have antib genes, surely 
 
-  //int MAXRADIUS=10;
-  // double ratio = ag/(fg+ag);
-  
-  double fgscale=pow(3.,n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
-  fg = pow(fg,n_exponent_regulation); //squared gives a steeper sigmoid funct :P
-  ag = pow(ag,n_exponent_regulation);
-  double regulation_growth = fg/(fg+fgscale);
-  double regulation_antib  = ag/(ag+fgscale) - regulation_growth; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
-
-  double agprod= max_ab_prod_per_unit_time*regulation_antib/(regulation_growth+regulation_antib+0.1);//was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
-  
-  double howmany_pos_get_ab = bnldev(agprod,len_ab_poslist);
+  double howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
   int which_ab[MAXSIZE];
   int nrtypes=0;
 
