@@ -54,6 +54,11 @@ void BreakPoint_Recombination_Homog(TYPE2 *icel);
 void BreakPointDeletion_RightToLeft(TYPE2 *icel);
 void BreakPointDeletion_LeftToRight(TYPE2* icel);
 
+//takes care of regulation, and also set val3 val4 fval3 and fval4, 
+// It is accessed by function pointers in the code - this is going to be fun
+void Regulation0(TYPE2 *icel); //Old version of regulation - this works well
+void Regulation1(TYPE2 *icel); //New version - still under construction
+
 // Static global data structures and parameters
 static TYPE2** world;
 static TYPE2** antib;
@@ -101,6 +106,11 @@ double h_growth=10.;
 double h_antib_act=3.;
 double h_antib_inhib=2.;
 
+double max_repl_prob_per_unit_time=0.1;
+
+int which_regulation=0;
+void (*pt_Regulation)(TYPE2 *icel);
+
 void Initial(void)
 {
 	// readout parameters
@@ -143,6 +153,7 @@ void Initial(void)
     else if(strcmp(readOut, "-beta_birthrate") == 0) par_beta_birthrate = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-const_tot_ab_mut") == 0) const_tot_ab_mut = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-nr_Hgenes_to_stay_alive") == 0) nr_H_genes_to_stay_alive = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
     i++;
 	}
@@ -186,6 +197,13 @@ void Initial(void)
     fprintf(stderr,"Probability of 'noAB' spores from outer space set to: %f\n",tmp_prob_noABspores_fromouterspace);
     par_burn_in_time *= par_season_duration;
     fprintf(stderr,"par_burn_in_time set to: %d\n",par_burn_in_time);
+  }
+  // sets regulation pointer
+  if(which_regulation==0) pt_Regulation = &Regulation0;
+  else if(which_regulation==1) pt_Regulation = &Regulation1;
+  else{
+    fprintf(stderr,"Initial(): Error. which_regulation got unrecognised value: %d\n",which_regulation);
+    exit(1);
   }
 
   /* useally, one does not have to change the followings */
@@ -255,28 +273,8 @@ void InitialPlane(void)
         }
         else world[i][j].valarray[k]=-1;
         }
+        (*pt_Regulation)(&world[i][j]);  //tested, works fine :)
         
-        // SET GROWTH AND AB PRODUCTION PARAMETERS
-        world[i][j].val3=Genome2genenumber(world[i][j].seq,'F');
-        world[i][j].val4=Genome2genenumber(world[i][j].seq,'A');
-        world[i][j].val5=Genome2genenumber(world[i][j].seq,'H');
-
-        double fg=pow( world[i][j].val3 , n_exponent_regulation); //Genome2genenumber(nei->seq,'F');
-        double ag=pow( world[i][j].val4 , n_exponent_regulation); //Genome2genenumber(nei->seq,'A');
-        
-        double fgscale=pow( h_growth, n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
-        double agscale=pow( h_antib_act, n_exponent_regulation);
-        double fgscale_inhib_a=pow( h_antib_inhib, n_exponent_regulation);
-        
-        double regulation_growth = fg/(fg+fgscale);
-        double inhib_antib = fg/(fg+fgscale_inhib_a);
-        double regulation_antib  = ag/(ag+agscale) - inhib_antib; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
-        
-        double tot_growth = regulation_growth+regulation_antib+0.1;
-
-        world[i][j].fval3 = 0.1*regulation_growth/tot_growth;                         // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
-        world[i][j].fval4 = max_ab_prod_per_unit_time*regulation_antib/tot_growth;    //was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
-
       }else{
         fprintf(stderr,"Don't use me\n");
         exit(1);
@@ -440,30 +438,9 @@ void NextState(int row,int col)
         //   //printf("Hello\n");
         }
 
-        // UPON BIRTH WE SET A BUNCH OF PARAMETERS
-        world[row][col].val3=Genome2genenumber(nei->seq,'F');
-        world[row][col].val4=Genome2genenumber(nei->seq,'A');
-        world[row][col].val5=Genome2genenumber(nei->seq,'H');
+        // UPON BIRTH WE SET A BUNCH OF PARAMETERS: val3 val4 val5 fval3 fval4
+        (*pt_Regulation)(&world[row][col]);
         
-        double fg=pow( world[row][col].val3 , n_exponent_regulation); //Genome2genenumber(nei->seq,'F');
-        double ag=pow( world[row][col].val4 , n_exponent_regulation); //Genome2genenumber(nei->seq,'A');
-        
-        double fgscale=pow( h_growth, n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
-        double agscale=pow( h_antib_act, n_exponent_regulation);
-        double fgscale_inhib_a=pow( h_antib_inhib, n_exponent_regulation);
-        
-        double regulation_growth = fg/(fg+fgscale);
-        double inhib_antib = fg/(fg+fgscale_inhib_a);
-        double regulation_antib  = ag/(ag+agscale) - inhib_antib; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
-        
-        double tot_growth = regulation_growth+regulation_antib+0.1;
-
-        world[row][col].fval3 = 0.1*regulation_growth/tot_growth;                         // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
-        world[row][col].fval4 = max_ab_prod_per_unit_time*regulation_antib/tot_growth;    //was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
-        
-        // UpdateABproduction(row, col); // NO AB PROD AS SOON AS YOU ARE BORN <---- IMPORTANT DIFFERENCE (? IS IT THOUGH???)
-        // printf("Hello 4\n");
-
       }
     }
     
@@ -926,6 +903,46 @@ void BreakPointDeletion_LeftToRight(TYPE2* icel){
       break;
     }
   }
+}
+
+//takes care of regulation, sets fval3 and fval4, accessed by function pointers in the code - this is going to be fun
+//Old version of regulation - this works well
+void Regulation0(TYPE2 *icel){
+  // SET GROWTH AND AB PRODUCTION PARAMETERS
+  icel->val3=Genome2genenumber(icel->seq,'F');
+  icel->val4=Genome2genenumber(icel->seq,'A');
+  icel->val5=Genome2genenumber(icel->seq,'H');
+
+  double fg = icel->val3; //Genome2genenumber(nei->seq,'F');
+  double ag = icel->val4; //Genome2genenumber(nei->seq,'A');
+  
+  icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
+  icel->fval4 = max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
+
+} 
+//New version - still under construction
+void Regulation1(TYPE2 *icel){
+  // SET GROWTH AND AB PRODUCTION PARAMETERS
+  icel->val3=Genome2genenumber(icel->seq,'F');
+  icel->val4=Genome2genenumber(icel->seq,'A');
+  icel->val5=Genome2genenumber(icel->seq,'H');
+
+  double fg=pow( icel->val3 , n_exponent_regulation); //Genome2genenumber(nei->seq,'F');
+  double ag=pow( icel->val4 , n_exponent_regulation); //Genome2genenumber(nei->seq,'A');
+  
+  double fgscale=pow( h_growth, n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
+  double agscale=pow( h_antib_act, n_exponent_regulation);
+  double fgscale_inhib_a=pow( h_antib_inhib, n_exponent_regulation);
+  
+  double regulation_growth = fg/(fg+fgscale);
+  double inhib_antib = fg/(fg+fgscale_inhib_a);
+  double regulation_antib  = ag/(ag+agscale) - inhib_antib; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
+  
+  double tot_growth = regulation_growth+regulation_antib+0.1;
+
+  icel->fval3 = max_repl_prob_per_unit_time*regulation_growth/tot_growth;                         // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
+  icel->fval4 = max_ab_prod_per_unit_time*regulation_antib/tot_growth;    //was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
+
 }
 
 void UpdateABproduction(int row, int col){
