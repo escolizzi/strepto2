@@ -152,6 +152,7 @@ void Initial(void)
     else if(strcmp(readOut, "-breakpoint_mut_type") == 0) breakpoint_mut_type = *(argv_g[i+1]);
     else if(strcmp(readOut, "-beta_birthrate") == 0) par_beta_birthrate = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-const_tot_ab_mut") == 0) const_tot_ab_mut = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-prob_mut_antibtype_tot") == 0) prob_mut_antibtype_tot = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-nr_Hgenes_to_stay_alive") == 0) nr_H_genes_to_stay_alive = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
