@@ -72,12 +72,12 @@ static TYPE2** R;
 
 static char* AZ="HFAB"; //genome alphabet
 int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
-int init_genome_size = 10; 
+int init_genome_size = 20; 
 double rscale=10.; 
 double p_movement = 0.0;
 int par_season_duration=1000;
 double ddrate=0.001; //per-gene dupdel prob
-double prob_new_brpoint = 0.01; //inflow of new randomly placed breakpoints, per replication
+double prob_new_brpoint = 0.01; //inflow of one new randomly placed breakpoints, per replication
 double breakprob=0.01;//0.005; // probability of activating a break point
 double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
@@ -102,7 +102,7 @@ int mix_between_seasons = 1;
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 double par_beta_birthrate=0.3;
 int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
-double prob_mut_antibtype_tot = 0.05;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
+double prob_mut_antibtype_tot = 0.01;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
 int nr_H_genes_to_stay_alive=0;
 int n_exponent_regulation=2;
@@ -117,6 +117,8 @@ void (*pt_Regulation)(TYPE2 *icel);
 
 char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
 int initialise_from_input=0;
+
+TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} };
 
 void Initial(void)
 {
@@ -340,35 +342,41 @@ void NextState(int row,int col)
   // return;
   if(world[row][col].val2==0){
     int howmany_emptynei = CountMoore8(world,0,row,col); //counts how many neigh are empty
-    if( /*howmany_emptynei<7 ||*/ howmany_emptynei==8) return; // if number is less than this -> not enough resources, returns
+    if( /*howmany_emptynei<6 ||*/ howmany_emptynei==8) return; // if number is less than this -> not enough resources, returns
 
     // int howmanynei = 8 - howmany_emptynei; //so this is number of competing cells (1 or 2)
     // printf("howmanynei: %d\n", howmanynei);
-    double dirarray[8];
+    int dirarray[8];
     double grarray[8];
+    int bla;
+    // printf("dir and gr Array initial\n");
+    // for(bla=0;bla<8;bla++){
+    //   printf("%d,%f ",dirarray[bla],grarray[bla]);
+    // }printf("\n");
 
     double totgrowth=0;
     //printf("Hello 0\n");
     //we find who these neighbors are:
     for(k=1;k<9;k++){
       nei = GetNeighborP(world,row,col,k);
-      //printf("Getting fitness of genome:\t%s\n",nei->seq);
-
+      
       //check if this cell is inhibited by any antibiotic present in focal point
       if(nei->val!=0){
         int i=0;
         int flag=0;
         
         double repprob= ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]);
-        
+        // printf("guy number %d, repprob from ab = %f\n",k, repprob );
+        // printf("Genome:\t%s \t val3 = %d\n",nei->seq, nei->val3);
         //cell has no fitness genes in genome: cannot reproduce
-        if (world[row][col].val3==0 || repprob<=0.000000000001) continue;
+        if(nei->val3==0 || repprob<=0.000000000001) continue;
       
         //save direction
         dirarray[counter]=k;
 
-        double growth = repprob * world[row][col].fval3;
-        
+        double growth = repprob * nei->fval3;
+        // printf("Getting repl probability: %f\n",growth);
+
         //double numgrowthgenes = Genome2genenumber(nei->seq,'G')*growthperG - Genome2genenumber(nei->seq,'p')*growthperG*1.5 - Genome2genenumber(nei->seq,'P')*growthperG*1.5 - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'); //- Genome2genenumber(nei->seq,'A')- Genome2genenumber(nei->seq,'R');
         //if(numgrowthgenes<0) numgrowthgenes=0;
         // printf("Fitness: \t%f, fit wo p: %f\n", numgrowthgenes, Genome2genenumber(nei->seq,'G')*growthperG - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A') );
@@ -378,7 +386,7 @@ void NextState(int row,int col)
       }
       // if(counter==howmanynei) break;
     }
-    // printf("Hello 1\n");
+    // printf("Hello 1\n"); 
     if(counter){
       //double totalgrowth= 1. - exp(-beta*totgrowthgenes);  //total prob of replication
       double rn = genrand_real2()*8.;//(double)counter;
@@ -397,7 +405,7 @@ void NextState(int row,int col)
         // printf("counter: %d, direction: %d\n",counter, direction);
         TYPE2 winner = GetNeighborS(world,row,col,direction);
         world[row][col] = winner;
-        // printf("Hello 2\n");
+        // printf("Someone at dir %d replicates into pos %d %d.\n",direction,row,col);
         if(Mutate(world,row,col)==1){
         //   //printf("Genome after del at pos 0: %s\n",world[row][col].seq );
         //   //printf("Which would then have fitness: %f\n", Genome2genenumber(world[row][col].seq,'G')*growthperG - Genome2genenumber(world[row][col].seq,'p')*growthperG - costperR*Genome2genenumber(world[row][col].seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'));
@@ -422,9 +430,7 @@ void NextState(int row,int col)
     deathprob = ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 1. : 1.-BirthRate(&world[row][col], &antib[row][col]); //no H genes you die
 
     if(genrand_real2()<deathprob){//death
-      world[row][col].val=0;
-      world[row][col].val2=0;
-      world[row][col].seq[0]='\0';
+      world[row][col]=TYPE2_empty;
       // fprintf(stderr,"Death\n");
     }else{
       
@@ -448,10 +454,10 @@ void NextState(int row,int col)
           //   }
           // }
           if(/*!flag &&*/ genrand_real2() < p_movement){
+            // printf("seq before move -%s-", nei->seq);
             *nei = world[row][col];
-            world[row][col].val=0;
-            world[row][col].val2=0;
-            world[row][col].seq[0]='\0';
+            // printf(" seq after move %s\n", nei->seq);
+            world[row][col]=TYPE2_empty;
             // fprintf(stderr,"movement from %d %d to %d %d\n", row,col, neirow, neicol);
           }
         }
@@ -468,13 +474,13 @@ void Update(void){
   // PerfectMix(world);
   Asynchronous(); 
   
-  if(!burn_in){  
+  if(!burn_in){
     if(Time%par_movie_period==0){
       ColourPlanes(world,G,A,R); // Pretty big speed cost here, can be fixed later
       if(display) Display(world,antib,G,A,R);
       else ToMovie(world,antib,G,A,R);
     }
-    if(Time%par_outputdata_period==0) {
+    if(Time%par_outputdata_period==0){
       if(display){
         fprintf(stderr,"Time = %d\n",Time);
         PrintPopStats(world,antib);
@@ -1093,6 +1099,8 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
   PlotArray(array);
 }
 
+// print to file cell by cell in order, with format:
+// [Time] [tot_nr_antib] [antib,array,if,antibs,else,0,] (if val2)[[val2] [genome] [abgenes,if,ab,genes]](else)[0 n 0,]
 //returns tot_antib_genes
 int PrintPopFull(TYPE2 **world,TYPE2 **antib){
   FILE *fp;
@@ -1102,7 +1110,7 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
   for(int i=1;i<=nrow;i++)for(int j=1;j<=ncol;j++){
     fprintf(fp, "%d %d ",Time, antib[i][j].val2 );
     if(antib[i][j].val2){
-      for (int k=0; k<antib[i][j].val2; k++) {
+      for(int k=0; k<antib[i][j].val2; k++){
          fprintf(fp,"%d," , antib[i][j].valarray[k]);
       }
     }else fprintf(fp,"0,"); 
@@ -1110,8 +1118,12 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
     if(world[i][j].val2){
       tot_antib_genes+=world[i][j].val4;
       fprintf(fp, " %d %s ",world[i][j].val2, world[i][j].seq);
-      for (int k=0; k<strlen(world[i][j].seq); k++){
-        if(world[i][j].seq[k]=='A') fprintf(fp, "%d,",world[i][j].valarray[k]);
+      if(world[i][j].val4){
+        for (int k=0; k<strlen(world[i][j].seq); k++){
+          if(world[i][j].seq[k]=='A') fprintf(fp, "%d,",world[i][j].valarray[k]);
+        }
+      }else{
+        fprintf(fp,","); // this is so that you know there is nothing (!=0 - which is a valid AB ), and hopefully every piece of python breaks on this? 
       }
     }else{
       fprintf(fp," 0 n 0,"); 
@@ -1242,8 +1254,16 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
   return;
 }
 
-void InitialiseFromInput(TYPE2 **world,TYPE2 **bact) {};
-void InitialiseFromSingleGenome(TYPE2 **world,TYPE2 **bact) {};
+void InitialiseFromInput(TYPE2 **world,TYPE2 **bact){
+  fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
+  exit(1);
+}
+
+void InitialiseFromSingleGenome(TYPE2 **world,TYPE2 **bact){
+  fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
+  exit(1);
+}
+
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
   int i,j,k;
   int count=1;
