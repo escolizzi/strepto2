@@ -32,6 +32,9 @@ Antibiotics are on int** antib.
 struct point *ab_poslist; //2D array used to efficiently randomize antibiotics placement
 int len_ab_poslist; //size of ab_poslist
 void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS); //initializes ab_poslist
+void InitialiseFromInput(TYPE2 **world,TYPE2 **antib);
+void InitialiseFromSingleGenome(TYPE2 **world,TYPE2 **antib);
+void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib);
 
 //// Biological function declarations
 int Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this position
@@ -71,7 +74,7 @@ static char* AZ="HFAB"; //genome alphabet
 int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
 int init_genome_size = 10; 
 double rscale=10.; 
-double p_movement = 0.5;
+double p_movement = 0.0;
 int par_season_duration=1000;
 double ddrate=0.001; //per-gene dupdel prob
 double prob_new_brpoint = 0.01; //inflow of new randomly placed breakpoints, per replication
@@ -82,7 +85,8 @@ char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
 int par_movie_period = 20;
 int par_outputdata_period = 100;
-char init_genome[MAXSIZE]; // initial genome, for specific experiments
+char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
+int initialise_from_singlegenome=0;
 int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings
 int antib_bitstring_length = 6;
 double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
@@ -110,6 +114,9 @@ double max_repl_prob_per_unit_time=0.1;
 
 int which_regulation=0;
 void (*pt_Regulation)(TYPE2 *icel);
+
+char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
+int initialise_from_input=0;
 
 void Initial(void)
 {
@@ -155,6 +162,7 @@ void Initial(void)
     else if(strcmp(readOut, "-prob_mut_antibtype_tot") == 0) prob_mut_antibtype_tot = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-nr_Hgenes_to_stay_alive") == 0) nr_H_genes_to_stay_alive = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-input") == 0) strcpy( par_fileinput_name , argv_g[i+1] );
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
     i++;
 	}
@@ -170,9 +178,15 @@ void Initial(void)
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
   DIR *dir = opendir(par_movie_directory_name);
-  if(dir){ fprintf(stderr, "Directory %s already exists, simulation not starting\n",par_movie_directory_name); exit(1);}
+  if(dir){ fprintf(stderr, "Initial(): Error. Directory %s already exists, simulation not starting\n",par_movie_directory_name); exit(1);}
   FILE *fp = fopen(par_fileoutput_name,"r"); 
-  if(fp){ fprintf(stderr, "File %s already exists, simulation not starting\n",par_fileoutput_name); exit(1);}
+  if(fp){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); exit(1);}
+  //File for input - if any
+  if(strlen(par_fileinput_name)){
+    FILE *fp = fopen(par_fileinput_name,"r"); 
+    if(!fp){ fprintf(stderr, "Initial(): Error. Input file %s does not exist, simulation not starting\n",par_fileoutput_name); exit(1);}
+    else initialise_from_input=1;
+  }
 
   nplane = 5; /* # of planes (default=0)*/
   scale = 1; /* size of the window (default=2)*/
@@ -186,6 +200,13 @@ void Initial(void)
   if(const_tot_ab_mut){
     prob_mut_antibtype_perbit = prob_mut_antibtype_tot/(double)(antib_bitstring_length);
     fprintf(stderr,"Constant per AB mut rate used, prob_mut_antibtype_perbit reset to %f\n", prob_mut_antibtype_perbit);
+  }
+
+  if( strlen(init_genome) ){
+    if(initialise_from_input){
+      fprintf(stderr, "Initial(): Error. You cannot specify input file AND initial genome, simulation not starting\n"); exit(1);
+    }
+    initialise_from_singlegenome=1; //this will start a sim with one genome in the center of the grid
   }
 
   if(!antib_with_bitstring){
@@ -218,8 +239,7 @@ void Initial(void)
                                                                  // tomovie_nrow and tomovie_ncol 
 }
 
-void InitialPlane(void)
-{
+void InitialPlane(void){
   MakePlane(&world,&antib,&G,&A,&R);
 
   InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS);
@@ -234,61 +254,10 @@ void InitialPlane(void)
     4: state I want to put
     5: fraction of cells that get S1 state (0 to 1)
   */
-  int i,j,k;
-  int count=1;
-  // Initialise the grid with a bunch of genomes
-  int antib_counter = 1;
-  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
-  {
-    world[i][j].val=0;//only for colour
-    world[i][j].val2=0;//strain indication
-    antib[i][j].val2=0;//how many different AB strains
-    antib[i][j].val=0;//only for colour
-    for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
-    for(k=0;k<MAXSIZE;k++)
-    	world[i][j].seq[k]='\0';
-    if( genrand_real1()<0.01) // i==nrow/2 && j==nrow/2)
-    {
-      world[i][j].val=1+count%10;
-      world[i][j].val2=1+count;
-      antib_counter += 17;
-      if(init_genome[0] == '\0'){
-        for(k=0;k<init_genome_size+nr_H_genes_to_stay_alive;k++){
-          // if(k<init_genome_size/2) world[i][j].seq[k]='F';
-          // else world[i][j].seq[k]='A';
-          // world[i][j].seq[0]='B';
-          // world[i][j].seq[3+init_genome_size/2]='B';
-        
-        // world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
-        if(k<nr_H_genes_to_stay_alive) 
-          world[i][j].seq[k] = AZ[0];
-        else{
-          world[i][j].seq[k] = AZ[1]; //if no homeost genes needed -> we put none
-          if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; // antib
-          if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[3]; // give break points only once in a while  
-        }
-        
-        if( world[i][j].seq[k]=='A' ) {
-          if(antib_with_bitstring) world[i][j].valarray[k]=(int)( /*antib_counter*/ pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
-          else world[i][j].valarray[k]=antib_counter; //same within the same genome
-        }
-        else world[i][j].valarray[k]=-1;
-        }
-        (*pt_Regulation)(&world[i][j]);  //tested, works fine :)
-        
-      }else{
-        fprintf(stderr,"Don't use me\n");
-        exit(1);
-        strcpy(world[i][j].seq,init_genome);
-      }
-      world[i][j].seq[init_genome_size+nr_H_genes_to_stay_alive]='\0';
-      // printf("Genome: %s\n", world[i][j].seq);
-      count++;
-      //world[i][j].val2 = Genome2genenumber(world[i][j].seq,'G');
-       UpdateABproduction(i, j);
-
-    }
-  }
+  if(initialise_from_input) InitialiseFromInput(world,antib);
+  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(world,antib);
+  else InitialiseFromScratch(world,antib);
+  
   //InitialSet(world,1,0,1,0.001);
   //ReadSavedData("glidergun.sav",1,world);
   fprintf(stderr,"\n\nworld is ready. Let's go!\n\n");
@@ -462,8 +431,7 @@ void NextState(int row,int col)
       UpdateABproduction(row, col);
       //now we will try to move
       if(p_movement>0.){
-        int neidir=1+(int)(8.*genrand_real2());
-        
+        int neidir=1+(int)(8.*genrand_real2());        
         int neirow, neicol;
         GetNeighborC(world, row, col, neidir, &neirow, &neicol);
         nei=&world[neirow][neicol];
@@ -1274,3 +1242,56 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
   return;
 }
 
+void InitialiseFromInput(TYPE2 **world,TYPE2 **bact) {};
+void InitialiseFromSingleGenome(TYPE2 **world,TYPE2 **bact) {};
+void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
+  int i,j,k;
+  int count=1;
+  // Initialise the grid with a bunch of genomes
+  int antib_counter = 1;
+  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
+    world[i][j].val=0;//only for colour
+    world[i][j].val2=0;//strain indication
+    antib[i][j].val2=0;//how many different AB strains
+    antib[i][j].val=0;//only for colour
+    for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
+    for(k=0;k<MAXSIZE;k++)
+    	world[i][j].seq[k]='\0';
+    if( genrand_real1()<0.01) // i==nrow/2 && j==nrow/2)
+    {
+      world[i][j].val=1+count%10;
+      world[i][j].val2=1+count;
+      antib_counter += 17;
+      
+      for(k=0;k<init_genome_size+nr_H_genes_to_stay_alive;k++){
+        // if(k<init_genome_size/2) world[i][j].seq[k]='F';
+        // else world[i][j].seq[k]='A';
+        // world[i][j].seq[0]='B';
+        // world[i][j].seq[3+init_genome_size/2]='B';
+      
+        // world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
+        if(k<nr_H_genes_to_stay_alive) world[i][j].seq[k] = AZ[0];
+        else{
+          world[i][j].seq[k] = AZ[1]; //if no homeost genes needed -> we put none
+          if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; // antib
+          if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[3]; // give break points only once in a while  
+        }
+        
+        if( world[i][j].seq[k]=='A') {
+          if(antib_with_bitstring) world[i][j].valarray[k]=(int)( /*antib_counter*/ pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
+          else world[i][j].valarray[k]=antib_counter; //same within the same genome
+        }
+        else world[i][j].valarray[k]=-1;
+      }
+
+      (*pt_Regulation)(&world[i][j]);  //sets regulation parameters - tested, works fine :)
+      
+      world[i][j].seq[init_genome_size+nr_H_genes_to_stay_alive]='\0';
+      // printf("Genome: %s\n", world[i][j].seq);
+      count++;
+      //world[i][j].val2 = Genome2genenumber(world[i][j].seq,'G');
+      //UpdateABproduction(i, j);
+
+    }
+  }
+}
