@@ -51,6 +51,7 @@ int tomovie_nrow;
 int tomovie_ncol;
 int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R);
 void Pause();
+void Exit(int exit_number); //just exits, but prints the program and arguments while doing so - why haven't I though of this before?
 
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2 *icel);
 void BreakPoint_Recombination_Homog(TYPE2 *icel);
@@ -165,7 +166,7 @@ void Initial(void)
     else if(strcmp(readOut, "-nr_Hgenes_to_stay_alive") == 0) nr_H_genes_to_stay_alive = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-input") == 0) strcpy( par_fileinput_name , argv_g[i+1] );
-    else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);exit(1);}
+    else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);Exit(1);}
     i++;
 	}
   //makes output file
@@ -180,13 +181,13 @@ void Initial(void)
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
   DIR *dir = opendir(par_movie_directory_name);
-  if(dir){ fprintf(stderr, "Initial(): Error. Directory %s already exists, simulation not starting\n",par_movie_directory_name); exit(1);}
+  if(dir){ fprintf(stderr, "Initial(): Error. Directory %s already exists, simulation not starting\n",par_movie_directory_name); Exit(1);}
   FILE *fp = fopen(par_fileoutput_name,"r"); 
-  if(fp){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); exit(1);}
+  if(fp){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); Exit(1);}
   //File for input - if any
   if(strlen(par_fileinput_name)){
     FILE *fp = fopen(par_fileinput_name,"r"); 
-    if(!fp){ fprintf(stderr, "Initial(): Error. Input file %s does not exist, simulation not starting\n",par_fileoutput_name); exit(1);}
+    if(!fp){ fprintf(stderr, "Initial(): Error. Input file %s does not exist, simulation not starting\n",par_fileoutput_name); Exit(1);}
     else initialise_from_input=1;
   }
 
@@ -206,7 +207,7 @@ void Initial(void)
 
   if( strlen(init_genome) ){
     if(initialise_from_input){
-      fprintf(stderr, "Initial(): Error. You cannot specify input file AND initial genome, simulation not starting\n"); exit(1);
+      fprintf(stderr, "Initial(): Error. You cannot specify input file AND initial genome, simulation not starting\n"); Exit(1);
     }
     initialise_from_singlegenome=1; //this will start a sim with one genome in the center of the grid
   }
@@ -227,7 +228,7 @@ void Initial(void)
   else if(which_regulation==1) pt_Regulation = &Regulation1;
   else{
     fprintf(stderr,"Initial(): Error. which_regulation got unrecognised value: %d\n",which_regulation);
-    exit(1);
+    Exit(1);
   }
 
   /* useally, one does not have to change the followings */
@@ -488,7 +489,7 @@ void Update(void){
         n_antib=PrintPopFull(world,antib);
         if(n_antib==0){
           fprintf(stderr,"No antibiotic genes in the field, the simulation will terminate\n");
-          exit(1);
+          Exit(1);
         }
       }
     }
@@ -548,7 +549,7 @@ void ChangeSeasonMix(TYPE2 **world)
   
   //attempt 2, pick 100 spores at random
   sporenr=spore_fraction*nrow*ncol;
-  if(sporenr==0) {fprintf(stderr,"ChangeSeasonMix(): Error.No spores for next generation?\n"); exit(1);}
+  if(sporenr==0) {fprintf(stderr,"ChangeSeasonMix(): Error.No spores for next generation?\n"); Exit(1);}
   else if(sporenr>MAXSIZE) sporenr=MAXSIZE-1;
   int actual_sporenr=0;
   for(i=0;i<sporenr;i++){
@@ -569,7 +570,7 @@ void ChangeSeasonMix(TYPE2 **world)
     
     }
   }
-  if(actual_sporenr==0){fprintf(stderr,"ChangeSeasonMix(): No spores were found for next generation? System extinct\n"); exit(1);}
+  if(actual_sporenr==0){fprintf(stderr,"ChangeSeasonMix(): No spores were found for next generation? System extinct\n"); Exit(1);}
   //erase the plane
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
   {
@@ -602,7 +603,7 @@ void ChangeSeasonMix(TYPE2 **world)
     }
     if(attempt==100){
       fprintf(stderr,"ChangeSeasonMix(): Error. Cannot place new spore %d\n",i);
-      exit(1);
+      Exit(1);
     }else{
       world[ipos][jpos]=spores[i];
       //if(1+i==250) printf("val2 was %d, genome %s\n",spores[i].val2,spores[i].seq );
@@ -772,7 +773,7 @@ int Mutate(TYPE2** world, int row, int col)
   else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability
   else{ 
     fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
-    exit(1);
+    Exit(1);
     if(0) BreakPoint_Recombination_Homog(icell);
   }
   
@@ -798,7 +799,7 @@ void BreakPoint_Recombination_Homog(TYPE2* icel){
   
   //     UNDER CONSTRUCTION --- DO NOT USE ME --- //
   fprintf(stderr,"BreakPoint_Recombination_Homog(): Error. Function under construction");
-  exit(1);
+  Exit(1);
 
   // The whole thing is still to be constructed
 }
@@ -994,7 +995,11 @@ char Num2Char(int c)
 		case 0: return 'F';
 		case 1: return 'A';
 		case 2: return 'B';
-		default: fprintf(stderr, "Num2Char(): Error, character not recognised, got number: %d\n",c), exit(1);
+		default: {
+      fprintf(stderr, "Num2Char(): Error, character not recognised, got number: %d\n",c); 
+      Exit(1);
+      exit(1);
+    }
 	}
 }
 
@@ -1035,7 +1040,7 @@ void PrintPopStats(TYPE2 **world,TYPE2 **antib)
         int char2num = Char2Num(world[i][j].seq[k]);
         if(char2num==-1){
           fprintf(stderr,"Pop stats, val2 =%d,  got garbage from genome. Time = %d, k (garbage pos)=%d, seq = %s\n" ,world[i][j].val2, Time, k, world[i][j].seq );
-          exit(1);
+          Exit(1);
         }
 				av_genome[k][ char2num ]++; // clearly the better way would be an alignment, because this mismatches positions after dup/dels
 			}
@@ -1174,7 +1179,7 @@ void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R)
     {
       //world[i][j].val = 1;
       //world[i][j].val = GetGenomeColour(world[i][j].seq);
-      //if(world[i][j].val < 1) fprintf(stderr,"FUck.\n"), exit(0);
+      //if(world[i][j].val < 1) fprintf(stderr,"FUck.\n"), Exit(0);
       int Gcolour = Genome2genenumber(world[i][j].seq,'F')+colordisplacement;//+200;
       if(Gcolour==colordisplacement) G[i][j].val = 1;
       else if (Gcolour<255) G[i][j].val = Gcolour;
@@ -1256,16 +1261,17 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
 
 void InitialiseFromInput(TYPE2 **world,TYPE2 **bact){
   fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
-  exit(1);
+  Exit(1);
 }
 
 void InitialiseFromSingleGenome(TYPE2 **world,TYPE2 **bact){
   fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
-  exit(1);
+  Exit(1);
 }
 
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
   int i,j,k;
+
   int count=1;
   // Initialise the grid with a bunch of genomes
   int antib_counter = 1;
@@ -1314,4 +1320,17 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
 
     }
   }
+}
+
+void Exit(int exit_number){
+  
+  fprintf(stderr,"Exit(): exit. The program:\n");
+  
+  for(int i = 0; i < (int)argc_g; i++){
+    fprintf(stderr,"%s ",argv_g[i]);
+  }
+  fprintf(stderr,"\nwill exit now, with exit_number %d\n",exit_number);
+  
+  exit(exit_number);
+
 }
