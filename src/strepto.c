@@ -106,7 +106,7 @@ int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant
 double prob_mut_antibtype_tot = 0.01;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
 int nr_H_genes_to_stay_alive=0;
-int n_exponent_regulation=2;
+int n_exponent_regulation=2; // *********** NOT ACTUALLY USED, STOP HAVING THESE HEART ATTACK ABOUT THIS ***********
 double h_growth=10.;
 double h_antib_act=3.;
 double h_antib_inhib=2.;
