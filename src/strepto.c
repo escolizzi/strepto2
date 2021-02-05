@@ -32,8 +32,8 @@ Antibiotics are on int** antib.
 struct point *ab_poslist; //2D array used to efficiently randomize antibiotics placement
 int len_ab_poslist; //size of ab_poslist
 void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS); //initializes ab_poslist
-void InitialiseFromInput(TYPE2 **world,TYPE2 **antib);
-void InitialiseFromSingleGenome(TYPE2 **world,TYPE2 **antib);
+void InitialiseFromInput(const char* par_fileinput_name,TYPE2 **world,TYPE2 **antib);
+void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **bact);
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib);
 
 //// Biological function declarations
@@ -57,7 +57,7 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2 *icel);
 void BreakPoint_Recombination_Homog(TYPE2 *icel);
 void BreakPointDeletion_RightToLeft(TYPE2 *icel);
 void BreakPointDeletion_LeftToRight(TYPE2* icel);
-
+void ScrambleGenomeBtwnSeasons(TYPE2* icel);
 //takes care of regulation, and also set val3 val4 fval3 and fval4, 
 // It is accessed by function pointers in the code - this is going to be fun
 void Regulation0(TYPE2 *icel); //Old version of regulation - this works well
@@ -87,6 +87,7 @@ char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: da
 int par_movie_period = 20;
 int par_outputdata_period = 100;
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
+char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
 int initialise_from_singlegenome=0;
 int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings
 int antib_bitstring_length = 6;
@@ -118,6 +119,7 @@ void (*pt_Regulation)(TYPE2 *icel);
 
 char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
 int initialise_from_input=0;
+int scramble_genome_btwn_seasons = 0;
 
 TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} };
 
@@ -150,7 +152,9 @@ void Initial(void)
     else if(strcmp(readOut, "-breakpoint_inflow") == 0) prob_new_brpoint = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-maxtime") == 0) MaxTime = atoi(argv_g[i+1]);
-    else if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] );init_genome_size=strlen(init_genome);}
+    else if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] ); 
+                                                   strcpy( init_ab_gen , argv_g[i+2] ); i++; 
+                                                   init_genome_size=strlen(init_genome);}
     else if(strcmp(readOut, "-max_ab_prod_per_unit_time") == 0) max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-beta_antib_tradeoff") == 0) beta_antib_tradeoff = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_with_bitstring") == 0) antib_with_bitstring = atoi(argv_g[i+1]);
@@ -166,6 +170,8 @@ void Initial(void)
     else if(strcmp(readOut, "-nr_Hgenes_to_stay_alive") == 0) nr_H_genes_to_stay_alive = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-input") == 0) strcpy( par_fileinput_name , argv_g[i+1] );
+    else if(strcmp(readOut, "-ddrate") == 0) ddrate = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-scramble_genome_btwn_seasons") == 0) scramble_genome_btwn_seasons = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);Exit(1);}
     i++;
 	}
@@ -188,7 +194,7 @@ void Initial(void)
   if(strlen(par_fileinput_name)){
     FILE *fp = fopen(par_fileinput_name,"r"); 
     if(!fp){ fprintf(stderr, "Initial(): Error. Input file %s does not exist, simulation not starting\n",par_fileoutput_name); Exit(1);}
-    else initialise_from_input=1;
+    else {initialise_from_input=1;fclose(fp);}
   }
 
   nplane = 5; /* # of planes (default=0)*/
@@ -257,8 +263,10 @@ void InitialPlane(void){
     4: state I want to put
     5: fraction of cells that get S1 state (0 to 1)
   */
-  if(initialise_from_input) InitialiseFromInput(world,antib);
-  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(world,antib);
+
+  // Initialisation
+  if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
+  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, world, antib);
   else InitialiseFromScratch(world,antib);
   
   //InitialSet(world,1,0,1,0.001);
@@ -483,8 +491,10 @@ void Update(void){
     }
     if(Time%par_outputdata_period==0){
       if(display){
-        fprintf(stderr,"Time = %d\n",Time);
-        PrintPopStats(world,antib);
+        fprintf(stderr,"Update(): Error. display = 1 is so deprecated buddy - just don't use me\nBye\n");
+        Exit(1);
+        // fprintf(stderr,"Time = %d\n",Time);
+        //  PrintPopStats(world,antib);
       }else{
         n_antib=PrintPopFull(world,antib);
         if(n_antib==0){
@@ -539,6 +549,27 @@ int Genome2genenumber(const char *seq, char gene)
   return genecount;
 }
 
+void ScrambleGenomeBtwnSeasons(TYPE2* icel){
+  int genlen = strlen(icel->seq);
+  int i;
+  printf("Got genome: %s\n",icel->seq);
+  for(i=0;i<genlen;i++) if(icel->seq[i] == 'A') printf("%d,",icel->valarray[i]);
+  printf("\n");
+  for(i=genlen-1;i>=0;i--){
+    int rpos = (i+1)*genrand_real2(); // 0 <= rpos <= i, with  0 <= i <= genlen-1
+    char tmp_gene = icel->seq[rpos];
+    int tmp_ab = icel->valarray[rpos];
+    
+    icel->seq[rpos] = icel->seq[i];
+    icel->valarray[rpos] = icel->valarray[i];
+
+    icel->seq[i] = tmp_gene;
+    icel->valarray[i] = tmp_ab;
+  }
+  printf("--Scrabled: %s\n",icel->seq);
+  for(i=0;i<genlen;i++) if(icel->seq[i] == 'A') printf("%d,",icel->valarray[i]);
+  printf("\n");
+}
 
 //function to reseed plane with "spores"
 void ChangeSeasonMix(TYPE2 **world)
@@ -606,6 +637,7 @@ void ChangeSeasonMix(TYPE2 **world)
       Exit(1);
     }else{
       world[ipos][jpos]=spores[i];
+      if(scramble_genome_btwn_seasons) ScrambleGenomeBtwnSeasons(&world[ipos][jpos]); //scrambles genome and AB genome accordingly, does not alter anything other than order of genes
       //if(1+i==250) printf("val2 was %d, genome %s\n",spores[i].val2,spores[i].seq );
       if(genrand_real2()<prob_noABspores_fromouterspace){
         //instead of placing our own spores, we place an outsider, with no AB prod
@@ -624,7 +656,7 @@ void ChangeSeasonMix(TYPE2 **world)
       }
       world[ipos][jpos].val=1+i%10;
       world[ipos][jpos].val2=1+i;
-      UpdateABproduction(ipos, jpos);
+      // UpdateABproduction(ipos, jpos);
       //if(world[ipos][jpos].val2 == 250) printf("val2=250, genome %s\n",world[ipos][jpos].seq);
     
     }
@@ -669,6 +701,8 @@ void ChangeSeasonNoMix(TYPE2 **world)
         world[i][j].seq[howmanyFfromouterspace]='\0';
       }
       
+      if(scramble_genome_btwn_seasons) ScrambleGenomeBtwnSeasons(&world[i][j]); //scrambles genome and AB genome accordingly, does not alter anything other than order of genes
+
       if(!antib_with_bitstring){
         if(par_all_vs_all_competition){
           for(k=0;k<MAXSIZE;k++) if(world[i][j].seq[k]=='A')world[i][j].valarray[k] = bactnumber;
@@ -676,7 +710,7 @@ void ChangeSeasonNoMix(TYPE2 **world)
       }
       world[i][j].val = 1+bactnumber%10;
       world[i][j].val2 =1+bactnumber;
-      UpdateABproduction(i,j);
+      //UpdateABproduction(i,j);
     }
   }
 
@@ -927,7 +961,7 @@ void UpdateABproduction(int row, int col){
   int i,k;
   if( icell->val4==0 || icell->fval4<0.000000000001) return;//if you don't have antib genes, surely 
 
-  double howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
+  int howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
   int which_ab[MAXSIZE];
   int nrtypes=0;
 
@@ -1259,14 +1293,142 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
   return;
 }
 
-void InitialiseFromInput(TYPE2 **world,TYPE2 **bact){
-  fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
-  Exit(1);
+void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **bact){
+  FILE *fp = fopen(par_fileinput_name,"r"); 
+  fprintf(stderr, "InitialiseFromInput(): Warning, for now only reads genomes, not AB already in the plane\n");
+  fprintf(stderr, "InitialiseFromInput(): Warning, changing season within this function\n");
+  int ftime, fnr_antib_infield;
+  char fline[5241], *token, *token2,fab_string[10241];
+  char fline_cp[5241];
+  const char sep[2]=" ";
+  const char sepab[2]=",";
+  int i,j,k;
+  int sig_break = 0;
+  int line_nr=0;
+  for(i=1;i<=nrow;i++){
+    for(j=1;j<=ncol;j++){
+      world[i][j].val = 0;world[i][j].val2 = 0;
+      antib[i][j].val = 0;antib[i][j].val2 = 0;
+      for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=-1;
+      for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
+      for(k=0;k<MAXSIZE;k++) world[i][j].valarray[k]='\0';
+      line_nr++;
+      // fprintf(stderr,"Reading next line:\n");
+      if(  fgets(fline,5240,fp) != NULL ){
+        strcpy(fline_cp,fline); //for errors
+        // fprintf(stderr,"The line is: %s",fline); // contains new line
+        token = strtok(fline,sep);    // Time
+        // fprintf(stderr,"First token %s\n",token);
+        // fprintf(stderr,"First token %d\n",atoi(token));
+        // exit(1);
+        token = strtok(NULL, sep);      // nr of antib in field at this pos
+        
+        token = strtok(NULL, sep);      // antibs in field at this pos
+        // fprintf(stderr,"Got token %s\n",token);
+        
+        token = strtok(NULL, sep);      // identifier of this guy
+        // fprintf(stderr,"Got identifier %s\n",token);
+        if(token==NULL) continue;
+        int val2 = atoi(token);
+        token = strtok(NULL, sep);      // genome of this guy
+        if(token==NULL) continue;
+        if(token[0]!='n' || token[0]!=','){
+          world[i][j].val = 1+val2%10;
+          world[i][j].val2 = val2;
+          
+          //world[i][j].fval5=(double)(global_tag++); //to be used for log file
+          
+          strcpy(world[i][j].seq,token);
+          int genomelen = strlen(world[i][j].seq); world[i][j].seq[genomelen]='\0';
+          if(Genome2genenumber(world[i][j].seq, 'A') ){
+            token = strtok(NULL, sep);      //AB genes of this guy
+            strcpy(fab_string, token);
+            token2 = strtok(fab_string,sepab);
+            
+            for(k=0;k<MAXSIZE;k++){
+              if( world[i][j].seq[k]=='\0' )break;
+              if( world[i][j].seq[k]!='A' ) world[i][j].valarray[k]=-1;
+              if( world[i][j].seq[k]=='A' ){
+                // if(first_time)
+                if(token2 != NULL) world[i][j].valarray[k] = atoi(token2); //finally sets AB
+                else{
+                  fprintf(stderr,"Boia, vecio!\n");
+                  exit(1);
+                }
+                token2 = strtok(NULL, sepab);
+              }
+              
+            }
+          }
+          
+          (*pt_Regulation)(&world[i][j]); // sets regulation parameters
+
+        }else{
+          //empty genome
+          continue;
+        }
+        
+      }else{
+        fprintf(stderr,"Got NULL gets or reached end of file, hope these i,j satisfy you: %d %d\n",i,j);
+        fprintf(stderr,"%s\n",fline);
+        fprintf(stderr,"At line = %d",line_nr);
+        sig_break=1;
+        break;
+      }
+    }
+    if(sig_break) break;
+  }
+  // fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
+  // Exit(1);
+  if(mix_between_seasons) ChangeSeasonMix(world);
+  else ChangeSeasonNoMix(world);
 }
 
-void InitialiseFromSingleGenome(TYPE2 **world,TYPE2 **bact){
-  fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
-  Exit(1);
+void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **bact){
+  int i,j,k;
+  const char sepab[2]=",";
+  char *token2;
+   
+  //Initialise the field
+  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
+    world[i][j].val=0;//only for colour
+    world[i][j].val2=0;//strain indication
+    antib[i][j].val2=0;//how many different AB strains
+    antib[i][j].val=0;//only for colour
+    for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
+    for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
+  }
+  
+  // place sequence in the middle
+  i=nrow/2; j=ncol/2;  
+  world[i][j].val=1;
+  world[i][j].val2=2;
+  strcpy( world[i][i].seq, init_genome);
+  world[i][i].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+  
+  //world[i][j].fval5=(double)(global_tag++);
+
+  if(Genome2genenumber(world[i][j].seq, 'A') ){
+    token2 = strtok(init_ab_gen,sepab);
+    
+    for(k=0;k<MAXSIZE;k++){
+      if( world[i][j].seq[k]=='\0' )break;
+      if( world[i][j].seq[k]!='A' ) world[i][j].valarray[k]=-1;
+      if( world[i][j].seq[k]=='A' ){
+        // if(first_time)
+        if(token2 != NULL) world[i][j].valarray[k] = atoi(token2); //finally sets AB
+        else{
+          fprintf(stderr,"Boia, vecio!\n");
+          exit(1);
+        }
+        token2 = strtok(NULL, sepab);
+      }
+      
+    }
+  }
+
+  (*pt_Regulation)(&world[i][j]);
+
 }
 
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
@@ -1281,8 +1443,7 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
     antib[i][j].val2=0;//how many different AB strains
     antib[i][j].val=0;//only for colour
     for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
-    for(k=0;k<MAXSIZE;k++)
-    	world[i][j].seq[k]='\0';
+    for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
     if( genrand_real1()<0.01) // i==nrow/2 && j==nrow/2)
     {
       world[i][j].val=1+count%10;
