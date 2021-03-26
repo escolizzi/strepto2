@@ -121,6 +121,7 @@ char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_str
 int initialise_from_input=0;
 
 char par_abrepl_log[MAXSIZE]="ab_mut_log.txt"; //genome alphabet
+int change_season_at_initialisation_from_input = 1; // default is to start with full field from input data, and sporulate, i.e. changeseason
 
 TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} };
 
@@ -174,6 +175,7 @@ void Initial(void)
     else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-input") == 0) strcpy( par_fileinput_name , argv_g[i+1] );
     else if(strcmp(readOut, "-ddrate") == 0) ddrate = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-change_season_at_initialisation_from_input") == 0) change_season_at_initialisation_from_input = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);Exit(1);}
     i++;
 	}
@@ -207,7 +209,11 @@ void Initial(void)
   if(strlen(par_fileinput_name)){
     FILE *fp = fopen(par_fileinput_name,"r"); 
     if(!fp){ fprintf(stderr, "Initial(): Error. Input file %s does not exist, simulation not starting\n",par_fileoutput_name); Exit(1);}
-    else {initialise_from_input=1;fclose(fp);}
+    else {
+      fprintf(stderr,"change_season_at_initialisation_from_input = %d\n", change_season_at_initialisation_from_input);
+      initialise_from_input=1;
+      fclose(fp);
+      }
   }
 
   nplane = 5; /* # of planes (default=0)*/
@@ -1363,8 +1369,8 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
   int line_nr=0;
   for(i=1;i<=nrow;i++){
     for(j=1;j<=ncol;j++){
-      world[i][j].val = 0;world[i][j].val2 = 0;
-      antib[i][j].val = 0;antib[i][j].val2 = 0;
+      world[i][j].val = 0; world[i][j].val2 = 0;
+      antib[i][j].val = 0; antib[i][j].val2 = 0;
       for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=-1;
       for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
       for(k=0;k<MAXSIZE;k++) world[i][j].valarray[k]='\0';
@@ -1388,13 +1394,14 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
         int val2 = atoi(token);
         token = strtok(NULL, sep);      // genome of this guy
         if(token==NULL) continue;
-        if(token[0]!='n' || token[0]!=','){
+        if(token[0]!='n' && token[0]!=','){
           world[i][j].val = 1+val2%10;
           world[i][j].val2 = val2;
           
           world[i][j].fval5=(double)(global_tag++); //to be used for log file
           
           strcpy(world[i][j].seq,token);
+          
           int genomelen = strlen(world[i][j].seq); world[i][j].seq[genomelen]='\0';
           if(Genome2genenumber(world[i][j].seq, 'A') ){
             token = strtok(NULL, sep);      //AB genes of this guy
@@ -1436,8 +1443,22 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
   }
   // fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
   // Exit(1);
-  if(mix_between_seasons) ChangeSeasonMix(world);
-  else ChangeSeasonNoMix(world);
+  if(change_season_at_initialisation_from_input){
+    if(mix_between_seasons) ChangeSeasonMix(world);
+    else ChangeSeasonNoMix(world);
+  }else{
+    // else we have to initialise the log file here, because it's not taken care by changeseason
+    FILE *fp;
+    fp= fopen( par_abrepl_log, "a" );
+    for(i=1;i<=nrow;i++){
+      for(j=1;j<=ncol;j++){
+        if(world[i][j].val2 != 0)
+          fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+      }
+    }
+    fclose(fp);
+
+  }
 }
 
 void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **bact){
