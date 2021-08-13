@@ -26,8 +26,8 @@ Antibiotics are on int** antib.
 #include "cash2.h"
 #include "mersenne.h"
 #include "cash2-s.h"
-
-#define MAXSIZE 1024 // same as cash2.h, max size of genome
+#include "hash_table.h"
+#include "parameters.h"
 
 struct point *ab_poslist; //2D array used to efficiently randomize antibiotics placement
 int len_ab_poslist; //size of ab_poslist
@@ -71,50 +71,7 @@ static TYPE2** A;
 static TYPE2** R;
 //static TYPE2 empty = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.,{'\0'},{'\0'}};
 
-static char* AZ="HFAB"; //genome alphabet
-int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
-int init_genome_size = 20; 
-double rscale=10.; 
-double p_movement = 0.01;
-int par_season_duration=2500;
-double ddrate=0.001; //per-gene dupdel prob
-double prob_new_brpoint = 0.01; //inflow of one new randomly placed breakpoints, per replication
-double breakprob=0.01;//0.005; // probability of activating a break point
-double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
-char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
-char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
-char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
-int par_movie_period = 20;
-int par_outputdata_period = 100;
-char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
-char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
-int initialise_from_singlegenome=0;
-int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings
-int antib_bitstring_length = 16;
-double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
-double h_ag=2.;
-double max_ab_prod_per_unit_time = -1.; // set either by command line argument, or as 1/len_ab_pos
-double beta_antib_tradeoff = 1.;
-int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
-double prob_noABspores_fromouterspace = 0.;
-double tmp_prob_noABspores_fromouterspace=-1.;
-int burn_in=0;
-int par_burn_in_time=10; //this is going to be multiplied to season length
-int mix_between_seasons = 1;
-char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
-double par_beta_birthrate=0.3;
-int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
-double prob_mut_antibtype_tot = 0.01;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
-                                        // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
-int nr_H_genes_to_stay_alive=0;
-int n_exponent_regulation=2; // *********** NOT ACTUALLY USED, STOP HAVING THESE HEART ATTACK ABOUT THIS ***********
-double h_growth=10.;
-double h_antib_act=3.;
-double h_antib_inhib=2.; // *********** NOT ACTUALLY USED
 
-double max_repl_prob_per_unit_time=0.1;
-
-int which_regulation=0;
 void (*pt_Regulation)(TYPE2 *icel);
 
 char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
@@ -123,6 +80,8 @@ int scramble_genome_btwn_seasons = 0;
 int perfectmix=0;
 
 TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} };
+
+HASHTABLE ht;
 
 void Initial(void)
 {
@@ -174,6 +133,7 @@ void Initial(void)
     else if(strcmp(readOut, "-ddrate") == 0) ddrate = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-scramble_genome_btwn_seasons") == 0) scramble_genome_btwn_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-perfectmix") == 0) perfectmix = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-breakprob") == 0) breakprob = atof(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);Exit(1);}
     i++;
 	}
@@ -258,7 +218,112 @@ void InitialPlane(void){
 
   InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS);
   if(max_ab_prod_per_unit_time<0.) max_ab_prod_per_unit_time = 1/(double)len_ab_poslist;
-
+  
+  InitialiseHashTabletoNULL(&ht);
+    
+  int i,j;
+  // for(i=0;i<HASTHTABLE_SIZE_G;i++){
+  //   for(j=0;j<HASTHTABLE_SIZE_A;j++){
+  //     ht.items[i][j]->len_genome=-1; 
+  //     ht.items[i][j]->genome=NULL;
+  //     ht.items[i][j]->left=NULL;
+  //     ht.items[i][j]->right=NULL;
+  //     ht.items[i][j]->ab_br=NULL;
+  //   }
+  // }
+  
+  // exit(1);
+  int bla[7] = {1,17,10,12,4792,23,23};
+  int gen_len = sizeof(bla)/sizeof(bla[0]);
+  int dbla,dbla2; 
+  int ab = 17;
+  int ghash,abhash;
+  ghash = HashGenome(bla,gen_len);
+  abhash = HashAb(ab);
+  printf("\nHash of genome is: %d, hash of ab is: %d\n",ghash,abhash);
+  dbla = SearchAndInsert_HashTable(&ht,ghash,abhash, bla, gen_len, ab); 
+  
+  printf("\nInserting the same genome as above\n");
+  dbla2 = SearchAndInsert_HashTable(&ht,ghash,abhash, bla, gen_len, ab); 
+  
+  int bla2[7] = {1,17,10,12,4792,22,24}; //should collide with previous
+  int gen_len2 = sizeof(bla2)/sizeof(bla2[0]);
+  int dbla3; 
+  int ab2 = 17;
+  int ghash2,abhash2;
+  ghash2 = HashGenome(bla2,gen_len2);
+  abhash2 = HashAb(ab2);
+  printf("\nHash of genome2 is: %d, hash of ab is: %d\n",ghash2,abhash2);
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash2,abhash2, bla2, gen_len2, ab2); 
+  
+  int bla3[7] = {1,17,10,12,4792,24,22}; //should collide with previous
+  int gen_len3 = sizeof(bla3)/sizeof(bla3[0]);
+  int ab3 = 17;
+  int ghash3,abhash3;
+  ghash3 = HashGenome(bla3,gen_len3);
+  abhash3 = HashAb(ab3);
+  printf("\nHash of genome3 is: %d, hash of ab is: %d\n",ghash3,abhash3);
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash3,abhash3, bla3, gen_len3, ab3); 
+  
+  int bla4[7] = {1,17,10,12,4792,25,21}; //should collide with previous
+  int gen_len4 = sizeof(bla4)/sizeof(bla4[0]);
+  int ab4 = 17;
+  int ghash4,abhash4;
+  ghash4 = HashGenome(bla4,gen_len4);
+  abhash4 = HashAb(ab4);
+  printf("\nHash of genome4 is: %d, hash of ab is: %d\n",ghash4,abhash4);
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash4,abhash4, bla4, gen_len4, ab4); 
+  
+  printf("\nInserting the same genome as above\n");
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash4,abhash4, bla4, gen_len4, ab4); 
+  
+  int bla5[7] = {1,17,10,12,4792,46}; //should collide with previous
+  int gen_len5 = sizeof(bla5)/sizeof(bla5[0]);
+  int ab5 = 17;
+  int ghash5,abhash5;
+  ghash5 = HashGenome(bla5,gen_len5);
+  abhash5 = HashAb(ab5);
+  printf("\nHash of genome5 is: %d, hash of ab is: %d\n",ghash5,abhash5);
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash5,abhash5, bla5, gen_len5, ab5); 
+  
+  int ab6 = 18;
+  int abhash6;
+  abhash6 = HashAb(ab5); //*** THIS IS ON PURPOSE - to test collisions with ABs***//
+  printf("\nHash of genome5 is: %d, hash of ab is: %d\n",ghash5,abhash5);
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash5,abhash6, bla5, gen_len5, ab6); 
+  
+  printf("\nInserting the same genome as above\n");
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash5,abhash6, bla5, gen_len5, ab6); 
+  
+  int ab7 = 19;
+  int abhash7;
+  abhash7 = HashAb(ab5); //*** THIS IS ON PURPOSE - to test collisions with ABs***//
+  printf("\nHash of genome5 is: %d, hash of ab is: %d\n",ghash5,abhash5);
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash5,abhash7, bla5, gen_len5, ab7); 
+  
+  printf("\nInserting the same genome as above\n");
+  dbla3 = SearchAndInsert_HashTable(&ht,ghash5,abhash7, bla5, gen_len5, ab7); 
+  
+  
+  // exit(1);
+  
+  // for(i=0;i<HASTHTABLE_SIZE_G;i++){
+  //   for(j=0;j<HASTHTABLE_SIZE_A;j++){
+  //     int len_genome = 5; //determine ab genome size
+  //     ht.items[i][j] = CreateItem(bla, len_genome, 24441,27965242.);
+  //   }
+  // }
+  // ghash = HashGenome(bla,5); 
+  // printf("Hello, here is minhd: %d\n", ht.items[20][234]->ab_minhd[0].minhd);
+  // printf("ghash = %d\n", ghash);
+  
+  // printf("[%d",HashAb(0));
+  // for(i=1;i<2500;i++){
+  //   printf(",%d", HashAb(31*31*i*i - 17*i)%HASTHTABLE_SIZE_A );
+  // }
+  // printf("]\n");
+  // exit(1);
+  
   // for(int i=0; i<len_ab_poslist;i++) printf("%d %d\n",ab_poslist[i].row,ab_poslist[i].col);
   // exit(1);
   /* InitialSet(1,2,3,4,5)
@@ -268,7 +333,9 @@ void InitialPlane(void){
     4: state I want to put
     5: fraction of cells that get S1 state (0 to 1)
   */
-
+  
+  // InitialiseHashTable
+  
   // Initialisation
   if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
   else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, world, antib);
@@ -326,17 +393,20 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
   int i, k, h;
   int hammdist, cumhammdist=0;
   float birthrate;
-  if(ab->val2){
+  
+  if(ab->val2 && icel->val4){
     for (i=0; i<ab->val2; i++){
+      //All this is replaced by hash function 
       //check for each ab in the field whether individual has some resistance.
-      hammdist=999;
-      h=0;
-      for(k=0; icel->seq[k]!='\0'; k++){
-        if(icel->seq[k]=='A'){
-          h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
-          if(hammdist>h) hammdist=h; //check if h is the smallest
-        }
-      }
+      // hammdist=999;
+      // h=0;
+      // for(k=0; icel->seq[k]!='\0'; k++){
+      //   if(icel->seq[k]=='A'){
+      //     h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
+      //     if(hammdist>h) hammdist=h; //check if h is the smallest
+      //   }
+      // }
+      hammdist = SearchAndInsert_HashTable(&ht,icel->ghash,HashAb(ab->valarray[i]), icel->valarray2, icel->len_valarray2, ab->valarray[i]);
       cumhammdist+=hammdist; // add as cumulative distance that particular distance
     }
   }
@@ -521,8 +591,13 @@ void Update(void){
       prob_noABspores_fromouterspace = tmp_prob_noABspores_fromouterspace;   /////// OK BUT DOES THIS WORK ALSO WHEN WE DON'T WANT BURN IN?
     }
   }
+  
+  if(Time%100==0 && Time>0){
+    printf("\t\t\t\t\t Time = %d, Size of ht = %ld\n",Time, sizeof(ht));
+  }
 
   if(Time%par_season_duration==0 && Time>0){
+    printf("End of season \t\t\t\t\t Time = %d\n",Time);
     if(mix_between_seasons) ChangeSeasonMix(world);
     else ChangeSeasonNoMix(world);
   }
@@ -530,7 +605,6 @@ void Update(void){
   //while( Mouse()==0) {}; // you can run the program continuously by commenting out this statement
 
 }
-
 
 
 ////////////////////////
@@ -557,6 +631,24 @@ int Genome2genenumber(const char *seq, char gene)
   int seqlen=strlen(seq);
   for(i=0;i<seqlen;i++) if(seq[i]==gene) genecount++;
   return genecount;
+}
+
+// note that all int pointers except ab_genome are actually passed as references, and they are just int.
+void Genome2genenumberFAandSetABgenome(const char *seq, int *n_F, int *n_A, const int * ab_genome, int * reduced_ab_genome, int * len_ab_genome)
+{
+  int i,j=0,genecountA=0,genecountF=0;
+  int seqlen=strlen(seq);
+  for(i=0;i<seqlen;i++) {
+    if(seq[i]=='F') genecountF++;
+    else if(seq[i]=='A'){
+      genecountA++;
+      reduced_ab_genome[j]=ab_genome[i];
+      j++;
+    }
+  }
+  *n_F = genecountF;
+  *n_A = genecountA;
+  *len_ab_genome = j;
 }
 
 void ScrambleGenomeBtwnSeasons(TYPE2* icel){
@@ -929,8 +1021,17 @@ void BreakPointDeletion_LeftToRight(TYPE2* icel){
 //Old version of regulation - this works well
 void Regulation0(TYPE2 *icel){
   // SET GROWTH AND AB PRODUCTION PARAMETERS
-  icel->val3=Genome2genenumber(icel->seq,'F');
-  icel->val4=Genome2genenumber(icel->seq,'A');
+  
+  // icel->val3=Genome2genenumber(icel->seq,'F');
+  // icel->val4=Genome2genenumber(icel->seq,'A');
+  
+  // printf("icel->val4 = %d, ", icel->val4);
+  
+  Genome2genenumberFAandSetABgenome(icel->seq,&(icel->val3),&(icel->val4),icel->valarray,icel->valarray2,&(icel->len_valarray2));
+  
+  // printf("with new funct = %d\n", icel->val4);
+  // exit(1);
+  
   icel->val5=Genome2genenumber(icel->seq,'H');
 
   double fg = icel->val3; //Genome2genenumber(nei->seq,'F');
@@ -938,7 +1039,24 @@ void Regulation0(TYPE2 *icel){
   
   icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
   icel->fval4 = max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
-
+  
+  //This sets valarray2 - which is a reduced ab genome containing only ABs
+  // and also sets the hash function for this genome.
+  // int i,j=0;
+  // for(i=0;i<MAXSIZE;i++){
+  //   if(icel->seq[i]=='A'){
+  //       icel->valarray2[j] = icel->valarray[i];
+  //       j++;
+  //     }
+  // }
+  // icel->valarray2[j]=-1;
+  // icel->len_valarray2 = j;
+  
+  if(icel->val4 != icel->len_valarray2){
+    printf("Error: ab gen len different from icel->val4\n");
+  } 
+  
+  icel->ghash = HashGenome(icel->valarray2,icel->len_valarray2);
 } 
 //New version - still under construction
 void Regulation1(TYPE2 *icel){
@@ -1399,7 +1517,7 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE
   const char sepab[2]=",";
   char *token2;
    
-  //Initialise the field
+  //Initialise the field to zero
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
     world[i][j].val=0;//only for colour
     world[i][j].val2=0;//strain indication
@@ -1407,10 +1525,12 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE
     antib[i][j].val=0;//only for colour
     for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
     for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
+    
+    // world[i][j].crow=-1; // we use crow as tag (we are out of other ints in the cash struct :P )
   }
   
   // place sequence in the middle
-  i=nrow/2; j=ncol/2;  
+  i=nrow/2; j=ncol/2; 
   world[i][j].val=1;
   world[i][j].val2=2;
   strcpy( world[i][i].seq, init_genome);
@@ -1438,6 +1558,8 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE
   }
 
   (*pt_Regulation)(&world[i][j]);
+  
+  
 
 }
 

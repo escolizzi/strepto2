@@ -76,7 +76,7 @@ int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are place
 int init_genome_size = 20; 
 double rscale=10.; 
 double p_movement = 0.01;
-int par_season_duration=1000;
+int par_season_duration=2500;
 double ddrate=0.001; //per-gene dupdel prob
 double prob_new_brpoint = 0.01; //inflow of one new randomly placed breakpoints, per replication
 double breakprob=0.01;//0.005; // probability of activating a break point
@@ -90,11 +90,11 @@ char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
 int initialise_from_singlegenome=0;
 int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings
-int antib_bitstring_length = 6;
+int antib_bitstring_length = 16;
 double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
 double h_ag=2.;
 double max_ab_prod_per_unit_time = -1.; // set either by command line argument, or as 1/len_ab_pos
-double beta_antib_tradeoff = 3.;
+double beta_antib_tradeoff = 1.;
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 double prob_noABspores_fromouterspace = 0.;
 double tmp_prob_noABspores_fromouterspace=-1.;
@@ -119,6 +119,7 @@ void (*pt_Regulation)(TYPE2 *icel);
 
 char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
 int initialise_from_input=0;
+int perfectmix=0;
 
 char par_abrepl_log[MAXSIZE]="ab_mut_log.txt"; //genome alphabet
 int change_season_at_initialisation_from_input = 1; // default is to start with full field from input data, and sporulate, i.e. changeseason
@@ -175,6 +176,7 @@ void Initial(void)
     else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-input") == 0) strcpy( par_fileinput_name , argv_g[i+1] );
     else if(strcmp(readOut, "-ddrate") == 0) ddrate = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-perfectmix") == 0) perfectmix = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-change_season_at_initialisation_from_input") == 0) change_season_at_initialisation_from_input = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);Exit(1);}
     i++;
@@ -543,7 +545,7 @@ void Update(void){
     }
   }
 
-  
+  if(perfectmix) PerfectMix(world);
   Asynchronous(); 
   
   //checks if anybody got to boundaries
@@ -1360,8 +1362,8 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
   FILE *fp = fopen(par_fileinput_name,"r"); 
   fprintf(stderr, "InitialiseFromInput(): Warning, for now only reads genomes, not AB already in the plane\n");
   int ftime, fnr_antib_infield;
-  char fline[5241], *token, *token2,fab_string[10241];
-  char fline_cp[5241];
+  char fline[10241], *token, *token2,fab_string[10241];
+  char fline_cp[10241];
   const char sep[2]=" ";
   const char sepab[2]=",";
   int i,j,k;
@@ -1376,7 +1378,7 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
       for(k=0;k<MAXSIZE;k++) world[i][j].valarray[k]='\0';
       line_nr++;
       // fprintf(stderr,"Reading next line:\n");
-      if(  fgets(fline,5240,fp) != NULL ){
+      if(  fgets(fline,10240,fp) != NULL ){
         strcpy(fline_cp,fline); //for errors
         // fprintf(stderr,"The line is: %s",fline); // contains new line
         token = strtok(fline,sep);    // Time
