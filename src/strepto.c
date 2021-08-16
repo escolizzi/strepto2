@@ -1,4 +1,7 @@
 /*
+
+This version of the code is geared towards competition experiments between two strains.
+Genomes of the two strains can be provided at the start of the simulation. The simulation stops when only one strain is left.
 In this version antibiotic diversity can evolve. 
 Antibiotic are 12 bits elements, resistance depends on dist. 
 Antib are actually coded as integers. :P
@@ -33,7 +36,7 @@ struct point *ab_poslist; //2D array used to efficiently randomize antibiotics p
 int len_ab_poslist; //size of ab_poslist
 void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS); //initializes ab_poslist
 void InitialiseFromInput(const char* par_fileinput_name,TYPE2 **world,TYPE2 **antib);
-void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **antib);
+void InitialiseFromGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **antib);
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib);
 
 //// Biological function declarations
@@ -71,36 +74,40 @@ static TYPE2** A;
 static TYPE2** R;
 //static TYPE2 empty = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.,{'\0'},{'\0'}};
 
-static char* AZ="HFAB"; //genome alphabet
+static char* AZ="HCFAB"; //genome alphabet
 int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
 int init_genome_size = 20; 
 double rscale=10.; 
 double p_movement = 0.01;
 int par_season_duration=2500;
-double ddrate=0.001; //per-gene dupdel prob
-double prob_new_brpoint = 0.01; //inflow of one new randomly placed breakpoints, per replication
+double ddrate=0.0; //0.001; //per-gene dupdel prob
+double prob_new_brpoint = 0.0;//0.01; //inflow of one new randomly placed breakpoints, per replication
 double breakprob=0.01;//0.005; // probability of activating a break point
-double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
+double spore_fraction= 0.001; // fraction of nrow*ncol that sporulates
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
 int par_movie_period = 20;
 int par_outputdata_period = 100;
-char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
-char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
+char init_genome_evo[MAXSIZE]="\0"; // initial evolved genome, for specific experiments
+char init_ab_gen_evo[MAXSIZE]="\0"; // initial evolved antibiotic bitstring,
+char init_genome_com[MAXSIZE]="\0"; // initial competitor genome, for specific experiments
+char init_ab_gen_com[MAXSIZE]="\0"; // initial competitor antibiotic bitstring,
 int initialise_from_singlegenome=0;
 int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings
 int antib_bitstring_length = 16;
-double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
+double prob_mut_antibtype_perbit = 0.0; //0.05; //per bit probability of antibiotic type mutation
 double h_ag=2.;
 double max_ab_prod_per_unit_time = -1.; // set either by command line argument, or as 1/len_ab_pos
 double beta_antib_tradeoff = 1.;
+double competitor_birthrate=0.3; //birthrate of the generalist competitor -- read from command line
+double competitor_antibprod=0.005; //antibiotic production rate of the generalist -- read from command line
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
 double prob_noABspores_fromouterspace = 0.;
 double tmp_prob_noABspores_fromouterspace=-1.;
 int burn_in=0;
 int par_burn_in_time=10; //this is going to be multiplied to season length
-int mix_between_seasons = 1;
+int mix_between_seasons = 0; //1
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 double par_beta_birthrate=0.3;
 int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
@@ -108,7 +115,7 @@ double prob_mut_antibtype_tot = 0.01;    // prob_mut_antibtype_tot is used inste
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
 int nr_H_genes_to_stay_alive=0;
 int n_exponent_regulation=2; // *********** NOT ACTUALLY USED, STOP HAVING THESE HEART ATTACK ABOUT THIS ***********
-double h_growth=10.;
+double h_growth=10.; //10.
 double h_antib_act=3.;
 double h_antib_inhib=2.; // *********** NOT ACTUALLY USED
 
@@ -135,8 +142,9 @@ void Initial(void)
   MaxTime = 2147483647; /* default=2147483647 */
   nrow = mynrow; /* # of row (default=100)*/
   ncol = myncol; /* # of column (default=100)*/
-  init_genome[0]='\0';
-  
+  init_genome_evo[0]='\0';
+  init_genome_com[0]='\0';
+
 	for(int i = 1; i < (int)argc_g; i++)
 	{
 	  readOut = (char*)argv_g[i];
@@ -153,11 +161,16 @@ void Initial(void)
     else if(strcmp(readOut, "-breakpoint_inflow") == 0) prob_new_brpoint = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-maxtime") == 0) MaxTime = atoi(argv_g[i+1]);
-    else if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] ); 
-                                                   strcpy( init_ab_gen , argv_g[i+2] ); i++; 
-                                                   init_genome_size=strlen(init_genome);}
+    else if(strcmp(readOut, "-init_genomes") == 0) {strcpy( init_genome_evo , argv_g[i+1] ); //this differs from original branch: read 2 genomes
+                                                   strcpy( init_ab_gen_evo , argv_g[i+2] );
+                                                   strcpy( init_genome_com , argv_g[i+3] ); //genome of competitor
+                                                   strcpy( init_ab_gen_com , argv_g[i+4] );
+                                                    i+=3; 
+                                                   init_genome_size=strlen(init_genome_evo);}
     else if(strcmp(readOut, "-max_ab_prod_per_unit_time") == 0) max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-beta_antib_tradeoff") == 0) beta_antib_tradeoff = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-competitor_birthrate") == 0) competitor_birthrate = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-competitor_antibprod") == 0) competitor_antibprod = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_with_bitstring") == 0) antib_with_bitstring = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-antib_bitstring_length") == 0) antib_bitstring_length = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-prob_mut_antibtype_perbit") == 0) prob_mut_antibtype_perbit = atof(argv_g[i+1]);
@@ -213,7 +226,7 @@ void Initial(void)
     fprintf(stderr,"Constant per AB mut rate used, prob_mut_antibtype_perbit reset to %f\n", prob_mut_antibtype_perbit);
   }
 
-  if( strlen(init_genome) ){
+  if( strlen(init_genome_evo) ){
     if(initialise_from_input){
       fprintf(stderr, "Initial(): Error. You cannot specify input file AND initial genome, simulation not starting\n"); Exit(1);
     }
@@ -256,7 +269,7 @@ void Initial(void)
 void InitialPlane(void){
   MakePlane(&world,&antib,&G,&A,&R);
 
-  InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS);
+  InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS); //generates array with relative positions of circle around a strep for AB deposition
   if(max_ab_prod_per_unit_time<0.) max_ab_prod_per_unit_time = 1/(double)len_ab_poslist;
 
   // for(int i=0; i<len_ab_poslist;i++) printf("%d %d\n",ab_poslist[i].row,ab_poslist[i].col);
@@ -271,7 +284,7 @@ void InitialPlane(void){
 
   // Initialisation
   if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
-  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, world, antib);
+  else if(initialise_from_singlegenome) InitialiseFromGenome(init_genome_evo, init_ab_gen_evo, world, antib); //now is from 2 genomes
   else InitialiseFromScratch(world,antib);
   
   //InitialSet(world,1,0,1,0.001);
@@ -678,7 +691,7 @@ void ChangeSeasonMix(TYPE2 **world)
 void ChangeSeasonNoMix(TYPE2 **world)
 {
   int i,j,k,row,col,bactnumber=0;
-  
+  int count1=0, count2=0;
   //Go through the plane
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++){
     // delete the antib plane
@@ -689,6 +702,8 @@ void ChangeSeasonNoMix(TYPE2 **world)
     }
     //empty the plane - with small prob, we do not wipe this guys out, because it sporulates
     // in other words, with high prob we wipe people out
+    //count how many of each type we have -- we end the simulation when only spores of one type are left (for competition experiment)
+
     if(genrand_real2() < (1. - spore_fraction) ){
       world[i][j].val = 0;
       world[i][j].val2 = 0;
@@ -700,7 +715,8 @@ void ChangeSeasonNoMix(TYPE2 **world)
     else{
       bactnumber++;
       //with small prob we did not kill the guy, then: 
-      
+      if (world[i][j].val==1){ count1++;}else if (world[i][j].val==2){count2++;}
+
       //instead of placing our own spores, we place an outsider, with no AB prod
       if(genrand_real2()<prob_noABspores_fromouterspace){
         int howmanyFfromouterspace =100;
@@ -718,10 +734,21 @@ void ChangeSeasonNoMix(TYPE2 **world)
           for(k=0;k<MAXSIZE;k++) if(world[i][j].seq[k]=='A')world[i][j].valarray[k] = bactnumber;
         }
       }
-      world[i][j].val = 1+bactnumber%10;
-      world[i][j].val2 =1+bactnumber;
+     // world[i][j].val = 1+bactnumber%10;
+      //world[i][j].val2 =1+bactnumber;
       //UpdateABproduction(i,j);
     }
+  }
+  printf("evolved strain: %d, competitor strain: %d\n", count1, count2);
+  if (!count1 && count2){
+    printf("Evolved strain went extinct. Exiting simulation...");
+    Exit(0);
+  }else if (!count2 && count1){
+    printf("Competitor strain went extinct. Exiting simulation...");
+    Exit(0);
+  }if (!count1 && !count2){
+    printf("Both strain went extinct. Exiting simulation...");
+    Exit(0);
   }
 
   // printf("I got %d spores\n", bactnumber);
@@ -931,14 +958,19 @@ void Regulation0(TYPE2 *icel){
   // SET GROWTH AND AB PRODUCTION PARAMETERS
   icel->val3=Genome2genenumber(icel->seq,'F');
   icel->val4=Genome2genenumber(icel->seq,'A');
-  icel->val5=Genome2genenumber(icel->seq,'H');
+  icel->val5=Genome2genenumber(icel->seq,'C');
 
   double fg = icel->val3; //Genome2genenumber(nei->seq,'F');
   double ag = icel->val4; //Genome2genenumber(nei->seq,'A');
   
-  icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
-  icel->fval4 = max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
-
+  if (icel->val5 == 0){
+    icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
+    icel->fval4 = max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
+  }
+  else{
+    icel->fval3 = competitor_birthrate;
+    icel->fval4 = competitor_antibprod;
+  }
 } 
 //New version - still under construction
 void Regulation1(TYPE2 *icel){
@@ -1394,39 +1426,50 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
   else ChangeSeasonNoMix(world);
 }
 
-void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **antib){
+void InitialiseFromGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **antib){
   int i,j,k;
   const char sepab[2]=",";
   char *token2;
-   
-  //Initialise the field
-  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
-    world[i][j].val=0;//only for colour
-    world[i][j].val2=0;//strain indication
-    antib[i][j].val2=0;//how many different AB strains
-    antib[i][j].val=0;//only for colour
-    for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
-    for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
+  int count1=0, count2=0; //keep track of how many spores of each type were placed
+  
+  int ab_array[MAXSIZE];
+  int ab_array_com[MAXSIZE];
+  for(i=0; i<MAXSIZE;i++){
+    ab_array[i]=-1;
+    ab_array_com[i]=-1;
   }
   
-  // place sequence in the middle
-  i=nrow/2; j=ncol/2;  
-  world[i][j].val=1;
-  world[i][j].val2=2;
-  strcpy( world[i][i].seq, init_genome);
-  world[i][i].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
   
-  //world[i][j].fval5=(double)(global_tag++);
-
-  if(Genome2genenumber(world[i][j].seq, 'A') ){
+  //Initialises ab_array to ab genome
+  if(Genome2genenumber(init_genome, 'A') ){
     token2 = strtok(init_ab_gen,sepab);
-    
     for(k=0;k<MAXSIZE;k++){
-      if( world[i][j].seq[k]=='\0' )break;
-      if( world[i][j].seq[k]!='A' ) world[i][j].valarray[k]=-1;
-      if( world[i][j].seq[k]=='A' ){
+      if( init_genome[k]=='\0' )break;
+      if( init_genome[k]!='A' ) ab_array[k]=-1;
+      if( init_genome[k]=='A' ){
         // if(first_time)
-        if(token2 != NULL) world[i][j].valarray[k] = atoi(token2); //finally sets AB
+        if(token2 != NULL) ab_array[k] = atoi(token2); //finally sets AB
+        else{
+          fprintf(stderr,"Boia, vecio!\n");
+          exit(1);
+        }
+        token2 = strtok(NULL, sepab);
+      }
+      printf("%d,",init_genome[k]);  
+    }
+    printf("\n");
+  }
+ 
+  token2=NULL;
+  //Initialises ab_array_com to ab genome
+  if(Genome2genenumber(init_genome_com, 'A') ){
+    token2 = strtok(init_ab_gen_com,sepab);
+    for(k=0;k<MAXSIZE;k++){
+      if( init_genome_com[k]=='\0' )break;
+      if( init_genome_com[k]!='A' ) ab_array_com[k]=-1;
+      if( init_genome_com[k]=='A' ){
+        // if(first_time)
+        if(token2 != NULL) ab_array_com[k] = atoi(token2); //finally sets AB
         else{
           fprintf(stderr,"Boia, vecio!\n");
           exit(1);
@@ -1435,9 +1478,56 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE
       }
       
     }
+ }
+  
+  //Initialise the field
+  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
+    world[i][j].val=0;//only for colour
+    world[i][j].val2=0;//strain indication
+    antib[i][j].val2=0;//how many different AB strains
+    antib[i][j].val=0;//only for colour
+    for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
+    for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
+
+    if( genrand_real1()<0.001) //place evolved strain
+    {
+      count1++;
+      world[i][j].val=1;
+      world[i][j].val2=1;
+      strcpy( world[i][j].seq, init_genome);
+      printf("Genome used: %s\n", world[i][j].seq);
+      world[i][j].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+      //set the AB array
+      for(k=0; k<MAXSIZE;k++){
+        world[i][j].valarray[k]=ab_array[k];
+      }
+      (*pt_Regulation)(&world[i][j]);
+     
+    }else if( genrand_real1()<0.001) //place competitor strain
+    {
+      count2++;
+      world[i][j].val=2;
+      world[i][j].val2=2;
+      strcpy( world[i][j].seq, init_genome_com);
+      world[i][j].seq[ strlen(init_genome_com) ]='\0'; //It may well be that this is not needed...    
+      for(k=0; k<MAXSIZE;k++){
+        world[i][j].valarray[k]=ab_array_com[k];
+      }
+      (*pt_Regulation)(&world[i][j]);
+    }
+  
+  // place sequence in the middle
+  // i=nrow/2; j=ncol/2;  
+  // world[i][j].val=1;
+  // world[i][j].val2=2;
+  // strcpy( world[i][i].seq, init_genome);
+  // world[i][i].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+    
   }
 
-  (*pt_Regulation)(&world[i][j]);
+  
+  printf("%d spores placed of evolved strain, %d spores placed of competitor strain\n", count1, count2);
+  
 
 }
 
