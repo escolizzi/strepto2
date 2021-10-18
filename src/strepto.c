@@ -174,7 +174,10 @@ void Initial(void)
     else if(strcmp(readOut, "-ddrate") == 0) ddrate = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-scramble_genome_btwn_seasons") == 0) scramble_genome_btwn_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-perfectmix") == 0) perfectmix = atoi(argv_g[i+1]);
-    else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);Exit(1);}
+    else if(strcmp(readOut, "-breakprob") == 0) breakprob = atof(argv_g[i+1]);
+    else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
+          fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
+          Exit(1);}
     i++;
 	}
   //makes output file
@@ -857,7 +860,9 @@ void BreakPoint_Recombination_Homog(TYPE2* icel){
   
   int breakpos1,breakpos2, tmp;
   
-  if(genrand_real2() <  1. - pow(1. - breakprob , breaknr) ){
+  //Notice that breakprob is divided by 2 because there are two ways for each pair of breakpos to be chosen
+  // and I want to correct for that 
+  if(genrand_real2() <  1. - pow(1. - breakprob/2. , breaknr) ){
     breakpos1 = breakarray[(int)(breaknr*genrand_real2())]; //get first random break
     breakpos2 = breakarray[(int)(breaknr*genrand_real2())]; // get second random break
     if(breakpos2 == breakpos1) 
