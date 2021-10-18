@@ -815,10 +815,11 @@ int Mutate(TYPE2** world, int row, int col)
   if(breakpoint_mut_type=='S') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
   else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
   else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability
+  else if(breakpoint_mut_type=='H') BreakPoint_Recombination_Homog(icell); // random choice of two Bs
   else{ 
     fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
     Exit(1);
-    if(0) BreakPoint_Recombination_Homog(icell);
+    // if(0) BreakPoint_Recombination_Homog(icell);
   }
   
   //Random break point insertion
@@ -841,11 +842,42 @@ int Mutate(TYPE2** world, int row, int col)
 
 void BreakPoint_Recombination_Homog(TYPE2* icel){
   
-  //     UNDER CONSTRUCTION --- DO NOT USE ME --- //
-  fprintf(stderr,"BreakPoint_Recombination_Homog(): Error. Function under construction");
-  Exit(1);
-
-  // The whole thing is still to be constructed
+  char *seq=icel->seq;
+  //break points
+  int breakarray[MAXSIZE];
+  int breaknr=0;
+  int genome_size = strlen(seq);
+  for (int ipos=0; ipos<genome_size; ipos++){
+    if(seq[ipos]=='B'){
+      breakarray[breaknr]=ipos;
+      breaknr++;
+    }
+  }
+  if( 0 == breaknr ) return;
+  
+  int breakpos1,breakpos2, tmp;
+  
+  if(genrand_real2() <  1. - pow(1. - breakprob , breaknr) ){
+    breakpos1 = breakarray[(int)(breaknr*genrand_real2())]; //get first random break
+    breakpos2 = breakarray[(int)(breaknr*genrand_real2())]; // get second random break
+    if(breakpos2 == breakpos1) 
+      return; // if they are the same pos we do nothing
+    else if(breakpos1>breakpos2){
+      tmp = breakpos1;
+      breakpos1 = breakpos2;
+      breakpos2 = tmp;
+    }
+    // printf("Seq was: %s, brpos = %d %d\n",seq, breakpos1,breakpos2);
+    //else breakpos1 < breakpos2
+    for(int i=breakpos2,lcount=0 ; i<genome_size ; i++, lcount++){
+        seq[ breakpos1+lcount ] = seq[ i ];
+        icel->valarray[ breakpos1+lcount ] = icel->valarray[i];
+      }
+    genome_size-= (breakpos2 - breakpos1) ;
+    seq[genome_size] = '\0';
+    
+    // printf("New seq: %s, length = %d == %d?\n",seq, genome_size, strlen(seq));
+  }
 }
 
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
