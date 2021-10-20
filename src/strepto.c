@@ -856,33 +856,124 @@ void BreakPoint_Recombination_Homog(TYPE2* icel){
       breaknr++;
     }
   }
-  if( 0 == breaknr ) return;
+  if( breaknr <= 1 ) return; //can't recombine with only one break point
   
   int breakpos1,breakpos2, tmp;
   
-  //Notice that breakprob is divided by 2 because there are two ways for each pair of breakpos to be chosen
-  // and I want to correct for that 
-  if(genrand_real2() <  1. - pow(1. - breakprob/2. , breaknr) ){
-    breakpos1 = breakarray[(int)(breaknr*genrand_real2())]; //get first random break
-    breakpos2 = breakarray[(int)(breaknr*genrand_real2())]; // get second random break
-    if(breakpos2 == breakpos1) 
-      return; // if they are the same pos we do nothing
-    else if(breakpos1>breakpos2){
+  //Now, how many break points will activate?
+  //THIS IS NOT CORRECT -> int howmany_mut = bnldev(breakprob/2.,breaknr); //Notice that breakprob is divided by 2 because there are two ways for each pair of breakpos to be chosen
+  int howmany_mut = bnldev(breakprob,breaknr/2); //At most half break pos can be used 
+  if(howmany_mut==0) return;
+  
+  // printf("\n\nGot %d breakages\n",howmany_mut);
+  // printf("genome: %s\n",seq);
+  // printf("Befor scrambling breakarray array = [");
+  // for(int k=0;k<breaknr;k++){
+  //   printf(" %d,", breakarray[k]);
+  // }
+  // printf("]\n");
+  
+  //scramble breakarray - Just the first 2*nr_breaks pos will suffice
+  for(int i=0; i<2*howmany_mut;i++){
+    int rand_pos = i + (int)((breaknr-i)*genrand_real2());
+    tmp = breakarray[i];
+    breakarray[i] = breakarray[ rand_pos ];
+    breakarray[ rand_pos ] = tmp; 
+  }
+  breakarray[2*howmany_mut]=-2; // -2 marks the end of breakarray
+  
+  // printf("After scrambling breakarray array = [");
+  // for(int k=0;k<breaknr;k++){
+  //   printf(" %d,", breakarray[k]);
+  // }
+  // printf("]\n");
+  // if(howmany_mut>1) {printf("Check me out *********************************\n");}
+  
+  for(int i=0; i<2*howmany_mut;i++){
+    if (breakarray[i]==-2) break;
+    if(breakarray[i]==-1){
+      i++;
+      if(breakarray[i]!=-1){
+        fprintf(stderr,"We got a problem, this should also be set to -1\n");
+        exit(1);
+      }
+      continue;
+    }
+    
+    // Ok, now i and i+1 contain the positions for break points, so we break
+    breakpos1 = breakarray[i]; //get first random break
+    breakpos2 = breakarray[i+1]; // get second random break
+    if(breakpos2 == breakpos1){
+      fprintf(stderr,"BreakPoint_Recombination_Homog(): Error. breakpos2 == breakpos1 should not happen with this algorithm\n");
+      printf("\n\nGot %d breakages\n",howmany_mut);
+      printf("genome: %s\n",seq);
+      printf("breakarray array = [");
+      for(int k=0;k<breaknr;k++){
+        printf(" %d,", breakarray[k]);
+      }
+      printf("]\n");
+      exit(1);
+      // return; // if they are the same pos we do nothing}
+    }else if(breakpos1>breakpos2){
       tmp = breakpos1;
       breakpos1 = breakpos2;
       breakpos2 = tmp;
     }
     // printf("Seq was: %s, brpos = %d %d\n",seq, breakpos1,breakpos2);
     //else breakpos1 < breakpos2
-    for(int i=breakpos2,lcount=0 ; i<genome_size ; i++, lcount++){
-        seq[ breakpos1+lcount ] = seq[ i ];
-        icel->valarray[ breakpos1+lcount ] = icel->valarray[i];
-      }
+    for(int j=breakpos2,lcount=0 ; j<genome_size ; j++, lcount++){
+      seq[ breakpos1+lcount ] = seq[ j ];
+      icel->valarray[ breakpos1+lcount ] = icel->valarray[j];
+    }
     genome_size-= (breakpos2 - breakpos1) ;
     seq[genome_size] = '\0';
     
-    // printf("New seq: %s, length = %d == %d?\n",seq, genome_size, strlen(seq));
+    // printf("breakpos1 = %d, breakpos2 = %d\n",breakpos1,breakpos2);
+    // printf("New genome = %s\n",seq);
+        
+    i++; // <--- IMPORTANT --- we go 2 by 2, but increment the for loop by 1, so this is important
+    
+    // now we have to update the positions of breakarray
+    // those that have not been excised are either the same if pos < breakpos1 or shifted to the left if breakpos2 
+    // those excised must be deleted
+    for(int j = i+1; j<2*howmany_mut; j++ ){
+      if(breakarray[j]==-2) break;
+      else if(breakarray[j]==-1){
+        j++;
+        if(breakarray[j]!=-1){
+          fprintf(stderr,"We got a problem, this should also be set to -1\n");
+          exit(1);
+        }
+        continue;
+      }else{
+        int newbp1 = breakarray[j];
+        int newbp2 = breakarray[j+1];
+        //if either newbp1 or newbp2 are in between the positions of previous breakpos1 or breakpos2, then no breaking happens
+        if( (newbp1>breakpos1 && newbp1<breakpos2) || (newbp2>breakpos1 && newbp2<breakpos2) ){
+          // printf("Got either newbp1 or newbp2 inside previous breakpoints: %d, %d\n", newbp1,newbp2);
+          // printf("They are both set to -1 now\n");
+          breakarray[j]= -1;
+          breakarray[j+1]= -1;
+        }else{
+          //all that is left is that they are both out of breakpos1 and breakpos2
+          // question is: are they both to the left (then do nothing), 
+          // both to the right (decrease both by breakpos2-breakpos1), or one to the left and one to the right (then do only one)?
+          // it's probl simpler to test them independently
+          if(newbp1>breakpos2){ 
+            breakarray[j] -= breakpos2-breakpos1;
+            // printf("Got newbp1 outside previous breakpos2: %d\n", newbp1);
+          }
+          if(newbp2>breakpos2){ 
+            breakarray[j+1] -= breakpos2-breakpos1;
+            // printf("Got newbp2 outside previous breakpos2: %d\n", newbp2);
+          }
+        }
+        j++;
+      }
+    }
+    
   }
+  // if(howmany_mut>2) {printf("Check me out *********************************\n");exit(1);}
 }
 
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
