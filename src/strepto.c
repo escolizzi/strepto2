@@ -692,6 +692,7 @@ void ChangeSeasonNoMix(TYPE2 **world)
 {
   int i,j,k,row,col,bactnumber=0;
   int count1=0, count2=0;
+  static int seasoncount=0;
   //Go through the plane
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++){
     // delete the antib plane
@@ -739,15 +740,20 @@ void ChangeSeasonNoMix(TYPE2 **world)
       //UpdateABproduction(i,j);
     }
   }
+  seasoncount++;
   printf("evolved strain: %d, competitor strain: %d\n", count1, count2);
   if (!count1 && count2){
-    printf("Evolved strain went extinct. Exiting simulation...");
+    printf("Evolved strain went extinct. Exiting simulation...\n");
     Exit(0);
   }else if (!count2 && count1){
-    printf("Competitor strain went extinct. Exiting simulation...");
+    printf("Competitor strain went extinct. Exiting simulation...\n");
     Exit(0);
   }if (!count1 && !count2){
-    printf("Both strain went extinct. Exiting simulation...");
+    printf("Both strain went extinct. Exiting simulation...\n");
+    Exit(0);
+  }
+  if (seasoncount>=50){
+    printf("50 seasons passed. Exiting simulation...\n");
     Exit(0);
   }
 
@@ -1328,7 +1334,7 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
     }
   }
   
-  // printf("Hello, howmany = %d\n", *p_len_ab_poslist);
+  printf("Hello, howmany = %d, radius = %d\n", *p_len_ab_poslist, MAXRADIUS);
   // printf("The last position looks like: row = %d, col = %d \n", (*p_ab_poslist)[len_ab_poslist-1].row,(*p_ab_poslist)[len_ab_poslist-1].col);
   
   // exit(1);
@@ -1488,45 +1494,90 @@ void InitialiseFromGenome(const char* init_genome, char* init_ab_gen, TYPE2 **wo
     antib[i][j].val=0;//only for colour
     for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
     for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
-
-    if( genrand_real1()<0.001) //place evolved strain
-    {
-      count1++;
-      world[i][j].val=1;
-      world[i][j].val2=1;
-      strcpy( world[i][j].seq, init_genome);
-      printf("Genome used: %s\n", world[i][j].seq);
-      world[i][j].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
-      //set the AB array
-      for(k=0; k<MAXSIZE;k++){
-        world[i][j].valarray[k]=ab_array[k];
-      }
-      (*pt_Regulation)(&world[i][j]);
-     
-    }else if( genrand_real1()<0.001) //place competitor strain
-    {
-      count2++;
-      world[i][j].val=2;
-      world[i][j].val2=2;
-      strcpy( world[i][j].seq, init_genome_com);
-      world[i][j].seq[ strlen(init_genome_com) ]='\0'; //It may well be that this is not needed...    
-      for(k=0; k<MAXSIZE;k++){
-        world[i][j].valarray[k]=ab_array_com[k];
-      }
-      (*pt_Regulation)(&world[i][j]);
-    }
-  
-  // place sequence in the middle
-  // i=nrow/2; j=ncol/2;  
-  // world[i][j].val=1;
-  // world[i][j].val2=2;
-  // strcpy( world[i][i].seq, init_genome);
-  // world[i][i].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
-    
   }
 
+  int wholefield=nrow*ncol;
+  int nrspores=(int)((double)wholefield*0.001);
+  int sp1=0, sp2=0;
+  int posi, posj;
   
-  printf("%d spores placed of evolved strain, %d spores placed of competitor strain\n", count1, count2);
+  while(sp1<nrspores){
+    posi=genrand_real1()*nrow;
+    posj=genrand_real1()*ncol;
+
+    if(world[posi][posj].val2==0){
+      sp1++;
+
+      world[posi][posj].val=1;
+      world[posi][posj].val2=1;
+      strcpy( world[posi][posj].seq, init_genome);
+      printf("Genome used: %s\n", world[posi][posj].seq);
+      world[posi][posj].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+      //set the AB array
+      for(k=0; k<MAXSIZE;k++){
+        world[posi][posj].valarray[k]=ab_array[k];
+      }
+      (*pt_Regulation)(&world[posi][posj]);
+    }
+  }
+
+  while(sp2<nrspores){
+    posi=genrand_real1()*nrow;
+    posj=genrand_real1()*ncol;
+
+    if(world[posi][posj].val2==0){
+      sp2++;
+
+      world[posi][posj].val=2;
+      world[posi][posj].val2=2;
+      strcpy( world[posi][posj].seq, init_genome_com);
+      printf("Genome used: %s\n", world[posi][posj].seq);
+      world[posi][posj].seq[ strlen(init_genome_com) ]='\0'; //It may well be that this is not needed...
+      //set the AB array
+      for(k=0; k<MAXSIZE;k++){
+        world[posi][posj].valarray[k]=ab_array_com[k];
+      }
+      (*pt_Regulation)(&world[posi][posj]);
+    }
+  }
+  //   if( genrand_real1()<0.001) //place evolved strain
+  //   {
+  //     count1++;
+  //     world[i][j].val=1;
+  //     world[i][j].val2=1;
+  //     strcpy( world[i][j].seq, init_genome);
+  //     printf("Genome used: %s\n", world[i][j].seq);
+  //     world[i][j].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+  //     //set the AB array
+  //     for(k=0; k<MAXSIZE;k++){
+  //       world[i][j].valarray[k]=ab_array[k];
+  //     }
+  //     (*pt_Regulation)(&world[i][j]);
+     
+  //   }else if( genrand_real1()<0.001) //place competitor strain
+  //   {
+  //     count2++;
+  //     world[i][j].val=2;
+  //     world[i][j].val2=2;
+  //     strcpy( world[i][j].seq, init_genome_com);
+  //     world[i][j].seq[ strlen(init_genome_com) ]='\0'; //It may well be that this is not needed...    
+  //     for(k=0; k<MAXSIZE;k++){
+  //       world[i][j].valarray[k]=ab_array_com[k];
+  //     }
+  //     (*pt_Regulation)(&world[i][j]);
+  //   }
+  
+  // // place sequence in the middle
+  // // i=nrow/2; j=ncol/2;  
+  // // world[i][j].val=1;
+  // // world[i][j].val2=2;
+  // // strcpy( world[i][i].seq, init_genome);
+  // // world[i][i].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+    
+
+
+  
+  printf("%d spores placed of evolved strain, %d spores placed of competitor strain\n", sp1, sp2);
   
 
 }
