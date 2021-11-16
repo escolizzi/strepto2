@@ -1,0 +1,98 @@
+#!/bin/bash
+#Set job requirements
+#SBATCH -N 1
+#SBATCH -t 24:00:00	#120:00:00
+#SBATCH -p normal 
+
+#LISA Jobscript borrowed and adapted from Sandro
+#Note that you always get allocated an entire node: so might as well use the script to run multiple simulations!
+
+#fixed script parameters
+projdir="${HOME}/strepto_competition/"
+exedir="${projdir}/lisa_code/"
+simname="$TMPDIR/$workdir/strpt_competition_"
+krep_array=(0.01 0.05 0.1)
+kab_array=(0.00001 0.00002 0.00004)
+
+#hardcoded code parameters
+DDRATE=0.0
+NEWBREAK=0.0
+MUTAB=0.0
+SEAS=2500
+mix_yn=0
+beta_a=1
+a=16
+
+#read parameters from command line
+workdir=$1
+evo_genome="$2" #include the genome string and the antibiotic types, like for the strepto input
+
+#no need to load any particular modules
+echo "here"
+
+#copy input data to scratch and make the storage dir
+mkdir "$TMPDIR"/$workdir
+#cp $parfile "$TMPDIR"/$workdir
+#parfile="$TMPDIR/$workdir/${parfile##*/}"
+
+#generate random AB genes
+comp_genome="CAAAAAAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF \"$RANDOM"
+for i in {1..9}; do
+  comp_genome=$( echo $comp_genome,$(( $RANDOM % 65536 )) )
+done 
+
+comp_genome=$( echo $comp_genome\" )
+i=1;
+for krep in "${krep_array[@]}"; do
+
+  for kab in "${kab_array[@]}"; do
+  
+    ${exedir}/strepto -seed $RANDOM -moviedir "${simname}_krep_${krep}_kab_${kab}_1" \
+    -datafile "${simname}_krep_${krep}_kab_${kab}_1.txt" -movie_period $((SEAS/2)) -data_period $(( SEAS*4 )) \
+    -season $SEAS -ddrate $DDRATE -breakpoint_inflow ${NEWBREAK} -const_tot_ab_mut 1 \
+    -prob_mut_antibtype_tot $MUTAB -mix_between_seasons ${mix_yn} -beta_antib_tradeoff ${beta_a} \
+    -antib_bitstring_length ${a} -init_genomes ${evo_genome} ${comp_genome} \
+    -competitor_birthrate $krep -competitor_antibprod $kab &
+  
+    sleep 2
+ 
+  done
+done
+
+wait
+
+#copy the data back to homedir, because the temp dir will be completely removed when the batch job finishes
+cd "$TMPDIR"/
+tar zcf $workdir.tar.gz $workdir
+cp $workdir.tar.gz ${projdir}/results/
+cd -
+
+for krep in "${krep_array[@]}"; do
+
+  for kab in "${kab_array[@]}"; do
+  
+    ${exedir}/strepto -seed $RANDOM -moviedir "${simname}_krep_${krep}_kab_${kab}_2" \
+    -datafile "${simname}_krep_${krep}_kab_${kab}_2.txt" -movie_period $((s/2)) -data_period $(( s*4 )) \
+    -season $SEAS -ddrate $DDRATE -breakpoint_inflow ${NEWBREAK} -const_tot_ab_mut 1 \
+    -prob_mut_antibtype_tot $MUTAB -mix_between_seasons ${mix_yn} -beta_antib_tradeoff ${beta_a} \
+    -antib_bitstring_length ${a} -init_genomes ${evo_genome} "${comp_genome}" \
+    -competitor_birthrate $krep -competitor_antibprod $kab &
+  
+    sleep 2
+ 
+  done
+done
+
+wait
+
+echo "done running"
+
+#copy the data back to homedir, because the temp dir will be completely removed when the batch job finishes
+cd "$TMPDIR"/
+tar zcf $workdir.tar.gz $workdir
+cp $workdir.tar.gz ${projdir}/results/
+
+echo "end of job"
+
+
+
