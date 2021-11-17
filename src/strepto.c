@@ -444,8 +444,10 @@ void NextState(int row,int col)
   else if(world[row][col].val2!=0){
     //int flag=0;
     double deathprob;
-    deathprob = ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 1. : 1.-BirthRate(&world[row][col], &antib[row][col]); //no H genes you die
-
+    // deathprob = ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 1. : 1.-BirthRate(&world[row][col], &antib[row][col]); //no H genes you die
+    deathprob = 1. - BirthRate( &world[row][col] , &antib[row][col] ) ; // in this version nr_H_genes_to_stay_alive controls only birth rate
+                                                                        // this is the case if H are as biosynth genes but do not cause death when missing
+    
     if(genrand_real2()<deathprob){//death
       world[row][col]=TYPE2_empty;
       // fprintf(stderr,"Death\n");
