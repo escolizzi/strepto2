@@ -382,9 +382,9 @@ void NextState(int row,int col)
         int i=0;
         int flag=0;
         
-        double repprob= ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]);
+        double repprob= ( nei->val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]);
         // printf("guy number %d, repprob from ab = %f\n",k, repprob );
-        // printf("Genome:\t%s \t val3 = %d\n",nei->seq, nei->val3);
+        // printf("Genome:\t%s \t val5 = %d, birthrate = %f, repprob = %f\n",nei->seq, nei->val5, BirthRate(nei, &antib[row][col]) , repprob);
         //cell has no fitness genes in genome: cannot reproduce
         if(nei->val3==0 || repprob<=0.000000000001) continue;
       
