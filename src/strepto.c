@@ -124,6 +124,10 @@ int perfectmix=0;
 
 TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} };
 
+int ABproduced;
+
+char filename_ab_produced_intime[MAXSIZE] = "\0";
+
 void Initial(void)
 {
 	// readout parameters
@@ -136,6 +140,8 @@ void Initial(void)
   nrow = mynrow; /* # of row (default=100)*/
   ncol = myncol; /* # of column (default=100)*/
   init_genome[0]='\0';
+  
+  fprintf(stderr,"\n\n******************************\n\n WARNING: THIS BRANCH PRINTS to a file time vs. ab produced, for everytime step\n\n**************************\n\n");
   
 	for(int i = 1; i < (int)argc_g; i++)
 	{
@@ -187,6 +193,11 @@ void Initial(void)
     strcat(par_fileoutput_name,".txt");
     strcpy(par_movie_directory_name,"movie_");
     strcat(par_movie_directory_name,par_name);
+    
+    strcpy(filename_ab_produced_intime,"popsize_ab_produced_intime");
+    strcat(filename_ab_produced_intime,par_name);
+    strcat(filename_ab_produced_intime,".txt");
+    
     fprintf(stderr,"Output file name: %s\n Output movie dir name: %s\n",par_fileoutput_name,par_movie_directory_name);
   }
   //check if par_movie_directory_name and par_fileoutput_name already exist,
@@ -491,7 +502,24 @@ void Update(void){
   int n_antib;
   if(perfectmix) PerfectMix(world);
   
+  ABproduced = 0;
+  
   Asynchronous(); 
+  
+  FILE *fp;
+  int popsize_now;
+  // printf("jdfhskjfhskjdfhkjsdhfkjshdfkjhskjsd Time: %d\n",Time);
+  
+  if(Time%10==0){
+    // printf("Entering hello0\n");
+    popsize_now=0;
+    for(int i=1;i<=nrow;i++)for(int j=1;j<=ncol;j++)if(world[i][j].val2!=0)popsize_now++;
+    fp = fopen( filename_ab_produced_intime, "a" );
+    fprintf(fp, "%d %d %d\n", Time, popsize_now, ABproduced);
+    fclose(fp);
+    // ABproduced=0;
+    // printf("Exiting Hello \n");
+  }
   
   if(!burn_in){
     if(Time%par_movie_period==0){
@@ -1102,7 +1130,9 @@ void UpdateABproduction(int row, int col){
   int howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
   int which_ab[MAXSIZE];
   int nrtypes=0;
-
+  
+  ABproduced+=howmany_pos_get_ab;
+  
   //which ab can this individual produce?
   int genome_length = strlen(icell->seq);
   for (i=0; i<genome_length; i++){
