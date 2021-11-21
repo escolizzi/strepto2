@@ -57,6 +57,7 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2 *icel);
 void BreakPoint_Recombination_Homog(TYPE2 *icel);
 void BreakPointDeletion_RightToLeft(TYPE2 *icel);
 void BreakPointDeletion_LeftToRight(TYPE2* icel);
+void BreakPoint_Recombination_LeftToRight_then_RightToLeft(TYPE2* icel);
 void ScrambleGenomeBtwnSeasons(TYPE2* icel);
 //takes care of regulation, and also set val3 val4 fval3 and fval4, 
 // It is accessed by function pointers in the code - this is going to be fun
@@ -100,7 +101,7 @@ double prob_noABspores_fromouterspace = 0.;
 double tmp_prob_noABspores_fromouterspace=-1.;
 int burn_in=0;
 int par_burn_in_time=10; //this is going to be multiplied to season length
-int mix_between_seasons = 1;
+int mix_between_seasons = 0;
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 double par_beta_birthrate=0.3;
 int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
@@ -821,6 +822,7 @@ int Mutate(TYPE2** world, int row, int col)
   else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
   else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability
   else if(breakpoint_mut_type=='H') BreakPoint_Recombination_Homog(icell); // random choice of two Bs
+  else if(breakpoint_mut_type=='R') BreakPoint_Recombination_LeftToRight_then_RightToLeft(icell); // first breakp is on left , secodn is on right
   else{ 
     fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
     Exit(1);
@@ -1005,6 +1007,9 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
         match=b+genrand_real2()*(breaknr-b);
         // printf("match pos = %d\n", breakarray[match]);
         
+        // printf("%d %d\n", breaknr-1-match, breaknr-1-b);
+        // fflush(stdout);
+        
         // int lcount=0;
         for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
           seq[ breakarray[b]+lcount ] = seq[i];
@@ -1022,6 +1027,91 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
     }
   }
 }
+
+
+void BreakPoint_Recombination_LeftToRight_then_RightToLeft(TYPE2* icel){
+
+  char *seq=icel->seq;
+  //break points
+  int breakarray[MAXSIZE];
+  int breaknr=0;
+  int genome_size = strlen(seq);
+  
+  //fills in breakpoint position array
+  for (int ipos=0; ipos<genome_size; ipos++){
+    if(seq[ipos]=='B'){
+      breakarray[breaknr]=ipos;
+      breaknr++;
+    }
+  }
+
+  int b,b2, match;//,lcount;
+  // notice that like this breaks happen more frequently closer to 5' than to 3'
+  //Also, one break happens, period.
+  if(breaknr>1){
+    for(b=0; b<breaknr-1; b++){
+      if(genrand_real2()<breakprob){
+        // printf("\n val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icel->val2, icel->seq, breakarray[b]);
+        // printf("Old antib gen:\n");
+        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
+        // printf("\n");
+        
+        match = -1;
+        int breakpointsleft= breaknr-1-b;
+        double norm_fact = 1-pow(1-breakprob,breakpointsleft);// renske; don't need loop below //0.; 
+        // for(b2 = breaknr-1 ; b2>b ; b2--){
+        //   printf("b2 = %d, prob here = %f\n",b2,breakprob*(1.-pow( -breakprob, breaknr -b2  ) )/(1.+breakprob));
+        //   norm_fact += breakprob*(1.-pow( -breakprob, breaknr -b2  ) )/(1.+breakprob); // this is the probability of breaking of break point b2, calculated as p(1-p(1-p(1-..)))
+        //                                                                     // i.e. the prob that this breaks and all the others before didn't
+        //   //at the end of this we have the overall norm factor.
+        // }
+        
+        double running_sum= 0; 
+        double ran_pos = genrand_real2()*norm_fact;
+        for(b2 = breaknr-1 ; b2>b ; b2--){
+            //running_sum += (breakprob*(1.-pow( -breakprob, breaknr -b2  ) )/(1.+breakprob))/norm_fact;
+            running_sum+=breakprob;//1-pow(1-breakprob,breaknr-b2); //renske
+            if(running_sum>ran_pos){
+              //then the breaking position is b2
+              break;
+            }
+        }
+        
+        // printf("TEST, running_sum = %f\n",running_sum);
+        // exit(1);
+        
+        
+        match=b2;
+        // printf("norm = %f\n", norm_fact);
+        // printf("match pos = %d\n", breakarray[match]);
+        // printf("this is the %d th from the right\n", breaknr-1-match);
+        // printf("%d %d\n", breaknr-1-match, breakpointsleft);
+        // fflush(stdout);
+        
+        if(match<=b){
+          fprintf(stderr,"BreakPoint_Recombination_LeftToRight_then_RightToLeft(): Error. match < b should not happen\n");
+          exit(1);
+        }
+        
+        
+        // int lcount=0;
+        for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
+          seq[ breakarray[b]+lcount ] = seq[i];
+          icel->valarray[ breakarray[b]+lcount ] = icel->valarray[i];
+          // lcount++;
+        }
+        genome_size-= (breakarray[match] - breakarray[b]) ;
+        seq[genome_size] = '\0';
+        // printf("New genome is \n%s\n", icel->seq);
+        // printf("New antib gen:\n");
+        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
+        // printf("\n");
+        break;
+      }
+    }
+  }
+}
+
 
 void BreakPointDeletion_RightToLeft(TYPE2* icel){
   char *seq=icel->seq;
