@@ -1160,11 +1160,18 @@ void Regulation0(TYPE2 *icel){
   double ag = icel->val4; //Genome2genenumber(nei->seq,'A');
   
   icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
-  icel->fval4 = max_ab_prod_per_unit_time *constABprod + (1.-constABprod)*max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
+  
+  double constABprod_if_ag;
+  constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them ... out of thin air?
+  
+  icel->fval4 = max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
 
 } 
 //New version - still under construction
 void Regulation1(TYPE2 *icel){
+  fprintf(stderr, "Regulation1(): Error. Do not use this function, it is under construction\n");
+  exit(1);
+  
   // SET GROWTH AND AB PRODUCTION PARAMETERS
   icel->val3=Genome2genenumber(icel->seq,'F');
   icel->val4=Genome2genenumber(icel->seq,'A');
