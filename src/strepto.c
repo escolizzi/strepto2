@@ -113,6 +113,8 @@ double h_growth=10.;
 double h_antib_act=3.;
 double h_antib_inhib=2.; // *********** NOT ACTUALLY USED
 
+double constABprod = 0.; //constitutive antibiotic production
+
 double max_repl_prob_per_unit_time=0.1;
 
 int which_regulation=0;
@@ -176,6 +178,7 @@ void Initial(void)
     else if(strcmp(readOut, "-scramble_genome_btwn_seasons") == 0) scramble_genome_btwn_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-perfectmix") == 0) perfectmix = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-breakprob") == 0) breakprob = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-constABprod") == 0) constABprod = atof(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -1157,7 +1160,7 @@ void Regulation0(TYPE2 *icel){
   double ag = icel->val4; //Genome2genenumber(nei->seq,'A');
   
   icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
-  icel->fval4 = max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
+  icel->fval4 = max_ab_prod_per_unit_time *constABprod + (1.-constABprod)*max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
 
 } 
 //New version - still under construction
