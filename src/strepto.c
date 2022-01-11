@@ -104,8 +104,8 @@ int par_burn_in_time=10; //this is going to be multiplied to season length
 int mix_between_seasons = 0;
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
 double par_beta_birthrate=0.3;
-int const_tot_ab_mut=0;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
-double prob_mut_antibtype_tot = 0.01;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
+int const_tot_ab_mut=1;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
+double prob_mut_antibtype_tot = 0.005;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
 int nr_H_genes_to_stay_alive=0;
 int n_exponent_regulation=2; // *********** NOT ACTUALLY USED, STOP HAVING THESE HEART ATTACK ABOUT THIS ***********
@@ -113,8 +113,8 @@ double h_growth=10.;
 double h_antib_act=3.;
 double h_antib_inhib=2.; // *********** NOT ACTUALLY USED
 
-double constABprod = 0.; //constitutive antibiotic production
-
+double constABprod = 0.; //constitutive antibiotic production, default = 0.
+double scaling_factor_max_ab_prod_per_unit_time = 1.; // make this smaller to reduce AB prod, DO NOT MAKE THIS LARGER THAN 1. (default = 1.)
 double max_repl_prob_per_unit_time=0.1;
 
 int which_regulation=0;
@@ -179,6 +179,8 @@ void Initial(void)
     else if(strcmp(readOut, "-perfectmix") == 0) perfectmix = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-breakprob") == 0) breakprob = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-constABprod") == 0) constABprod = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-scaling_factor_max_ab_prod_per_unit_time") == 0) scaling_factor_max_ab_prod_per_unit_time = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-h_growth") == 0) h_growth= atof(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -515,7 +517,7 @@ void Update(void){
         n_antib=PrintPopFull(world,antib);
         if(n_antib==0){
           how_long_no_antib++;
-          if(how_long_no_antib==10){
+          if(how_long_no_antib==20){
             fprintf(stderr,"No antibiotic genes in the field for 20 saved data points, the simulation will terminate\n");
             Exit(1);
           }
@@ -1162,9 +1164,9 @@ void Regulation0(TYPE2 *icel){
   icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
   
   double constABprod_if_ag;
-  constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them ... out of thin air?
+  constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them out of thin air?
   
-  icel->fval4 = max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
+  icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
 
 } 
 //New version - still under construction
