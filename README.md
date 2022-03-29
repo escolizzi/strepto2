@@ -37,6 +37,7 @@ To make the time plots (e.g. inf Fig. 2a), type:
 
 To make the analysis, you'll need to re-run one growth cycle with a slightly different version of the code that outputs more fine grained data.
 For this first you'll need to extract the time point you are interested in from your data file
+
   ( which you can grep from the data file as follows: 
     say you want the growth cycle at time 3000000 from a simulation that lasted until 5000000 time steps, the type:
     grep 3000000 your_data_file.txt > your_data_file_time3000000.txt
@@ -45,7 +46,7 @@ For this first you'll need to extract the time point you are interested in from 
 Then, you'll need to start a new simulation with: 
   ./strepto_oneseason_lotsadata -input your_data_file_time3000000.txt -change_season_at_initialisation_from_input 1 -maxtime 2500
   (you can add additional options)
-This produces an additional log file which details every single replication and antibiotic production event: 
+This produces an additional log file which details every single replication and antibiotic production event.
 With this file, you can run:
 ./correlate_F_and_ABorR_intime.py your_log_file.txt 
 which produces a few figures similar to Fig. 2c, 2d, 3c and 3d. 
