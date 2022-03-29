@@ -1,5 +1,5 @@
 # strepto2
-Evolution of mutational division of labour in Streptomyces
+Evolution of mutation-driven division of labour in Streptomyces
 
 This code accompanies the article:
 Evolution of genome fragility enables microbial division of labor.
@@ -51,5 +51,5 @@ then use the script:
 ./plot_genomelendistr_v2.py [FEATURE POSITION IN FILENAME] "data_\*.txt"
 Where [FEATURE POSITION IN FILENAME] in this case would be 1, as it is read from the file name, split with the character "_".
 
-For any question please contact me at: enricosandro [dot] colizzi [at] gmail [dot] com
+It is my experience that these descriptions are rarely complete, and for this code in particular, some previous experience with the cash libraries might be useful. For any question please contact me at: enricosandro [dot] colizzi [at] gmail [dot] com
 Also, please let me know if you find bugs :)
