@@ -112,6 +112,8 @@ double h_growth=10.;
 double h_antib_act=3.;
 double h_antib_inhib=2.; // *********** NOT ACTUALLY USED
 
+double constABprod = 0.; //constitutive antibiotic production, default = 0.
+double scaling_factor_max_ab_prod_per_unit_time = 1.; // make this smaller to reduce AB prod, DO NOT MAKE THIS LARGER THAN 1. (default = 1.)
 double max_repl_prob_per_unit_time=0.1;
 
 int which_regulation=0;
@@ -176,6 +178,9 @@ void Initial(void)
     else if(strcmp(readOut, "-input") == 0) strcpy( par_fileinput_name , argv_g[i+1] );
     else if(strcmp(readOut, "-ddrate") == 0) ddrate = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-breakprob") == 0) breakprob = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-constABprod") == 0) constABprod = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-scaling_factor_max_ab_prod_per_unit_time") == 0) scaling_factor_max_ab_prod_per_unit_time = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-h_growth") == 0) h_growth= atof(argv_g[i+1]);
     else if(strcmp(readOut, "-change_season_at_initialisation_from_input") == 0) change_season_at_initialisation_from_input = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);Exit(1);}
     i++;
@@ -982,11 +987,18 @@ void Regulation0(TYPE2 *icel){
   double ag = icel->val4; //Genome2genenumber(nei->seq,'A');
   
   icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
-  icel->fval4 = max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
+  
+  double constABprod_if_ag;
+  constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them out of thin air?
+  
+  icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
 
 } 
 //New version - still under construction
 void Regulation1(TYPE2 *icel){
+  fprintf(stderr, "Regulation1(): Error. Do not use this function, it is under construction\n");
+  exit(1);
+  
   // SET GROWTH AND AB PRODUCTION PARAMETERS
   icel->val3=Genome2genenumber(icel->seq,'F');
   icel->val4=Genome2genenumber(icel->seq,'A');
