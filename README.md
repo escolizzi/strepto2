@@ -11,6 +11,11 @@ The source code is written in c, and uses a custom version of the cash library
 (which you can find here: https://github.com/escolizzi/cash2-s.BINF2018). 
 It runs with Ubuntu (and, I expect, with any reasonable OS built on Linux) but I have not tested it with other OS. 
 
+NOTICE: 
+- Depending on your machine, a single simulation with default parameters will take anywhere between 3 days and 2 weeks. 
+- Simulations with non-default parameters can take up to 3 months.
+- The code produces A LOT of data, from a few GB up to 100GB per run. 
+
 To run this code do the following:
 - Install cash from: https://github.com/escolizzi/cash2-s.BINF2018
 - Download strepto.c
@@ -21,7 +26,7 @@ To run this code do the following:
 The default parameter values run the evolutionary simulation described in Fig. 2. 
 For the various options you can open strepto.c and look for the function Initial(), where the command line options are screened. 
 
-The code produces A LOT of data (a few GB per run), organised as:
+The output is organised as follows:
 - a data file with data about the population (saved periodically)
 - a directory with images that give a rough impression about the field. 
 
