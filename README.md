@@ -57,5 +57,7 @@ then use the script:
 ./plot_genomelendistr_v2.py [FEATURE POSITION IN FILENAME] "data_\*.txt"
 Where [FEATURE POSITION IN FILENAME] in this case would be 1, as it is read from the file name, split with the character "_".
 
+LICENCE: the code in the file strepto.c is released as GPL-3.0-only (you're free to copy, change, hack, etc.). 
+
 It is my experience that these descriptions are rarely complete, and for this code in particular, some previous experience with the cash libraries might be useful. For any question please contact me at: enricosandro [dot] colizzi [at] gmail [dot] com
 Also, please let me know if you find bugs :)
