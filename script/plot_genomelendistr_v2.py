@@ -464,7 +464,7 @@ else:
 
     # ax.set_yscale('symlog')
     
-    logxaxis=False
+    logxaxis=True
     if logxaxis==True:
         ax.set_xscale('log')
         

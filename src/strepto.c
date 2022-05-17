@@ -1,13 +1,70 @@
 /*
 In this version antibiotic diversity can evolve. 
-Antibiotic are 12 bits elements, resistance depends on dist. 
+Antibiotic are 16 bits elements, resistance depends on dist. 
 Antib are actually coded as integers. :P
 
 strepto.c, a simulation system for streptomyces evolution, based on cash.
-Bacteria have a genome made of three types of genes: 'F', 'A', 'B'.
+Bacteria have a genome made of three types of genes: 'F', 'A', 'B'. 
 F genes are needed for growth, A genes for antibiotic production, B are break points.
+In some cases there is a fourth gene type 'H'. H genes are for homeostasis.
 Bacteria live on a grid, which is TYPE2** world.
-Antibiotics are on int** antib.
+Antibiotics are on a second TYPE2** plane, called antib.
+
+The variable TYPE2 is defined in cash2.h, here it takes different meaning depending on whetehr it is used for the bacteria place (world), or the antibiotic plane antib
+
+BACTERIA:
+
+typedef struct __type2{
+  int val;  //presence/absence of bacterium
+  int val2; // 0 = no bacterium, > 0 indicates strain nr. (inherited from spore)
+  int val3; auxiliary variable for nr. of F genes, calculated at birth from the genome (so that I don't have to recalculate everything every time step), see function Regulation0()
+  int val4; same as above, for nr. of A
+  int val5; same as above, nr. of H (if used)
+  double fval; //unused
+  double fval2;//unused
+  double fval3;// auxiliary variable for replication rate, calculated from the genome, see function Regulation0
+  double fval4;//antibiotic production rate
+  double fval5; //unused
+  char seq[1024]; // genome, a string composed of many F, A, B, H 
+  char str[1024]; //unused
+  int crow; //unused
+  int ccol; //unused
+  int valarray[1024]; // corresponding to the positions where there is an antibiotic gene in seq, there is a bitstring (represented as integer) here that specifies the antiobiotic type
+  
+  int valarray2[1024]; //unused
+  int len_valarray2; //unused
+  int ghash; //unused
+//  REPLICATOR replicator[256]; // //unused
+} TYPE2;
+
+ANTIBIOTICS PLANE:
+
+typedef struct __type2{
+  int val; // used but for nothing really
+  int val2; // nr of antibiotics at this location
+  int val3; //unused
+  int val4; //unused
+  int val5; //unused
+  double fval; //unused
+  double fval2; //unused
+  double fval3; //unused
+  double fval4; //unused
+  double fval5; //unused
+  char seq[1024]; //unused
+  char str[1024]; //unused
+  int crow; //unused
+  int ccol; //unused
+  
+  int valarray[1024]; //antibiotic types in the plane antib
+  
+  int valarray2[1024];  //unused
+  int len_valarray2; //unused
+  int ghash; //unused
+//  REPLICATOR replicator[256]; //unused
+} TYPE2;
+
+
+
 */
 
 #include <stdio.h>
@@ -37,7 +94,7 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib);
 
 //// Biological function declarations
-int Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this position
+void Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this position
 void UpdateABproduction(int row, int col);        // Places new antibiotics in the field
 void ChangeSeasonMix(TYPE2 **world);                 // "Sporulates" bacteria, shuffle spore position and restarts the field
 void ChangeSeasonNoMix(TYPE2 **world);                 // "Sporulates" bacteria and restarts the field, NO spore shuffling
@@ -45,7 +102,6 @@ void ChangeSeasonNoMix(TYPE2 **world);                 // "Sporulates" bacteria 
 //Printing, plotting, painting.
 void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R); 
 int Genome2genenumber(const char *seq, char gene);  // Convert genome to int of number of genes equal to char gene
-void PrintPopStats(TYPE2 **world, TYPE2 **antib);
 int PrintPopFull(TYPE2 **world,TYPE2 **antib);
 int tomovie_nrow;
 int tomovie_ncol;
@@ -54,34 +110,21 @@ void Pause();
 void Exit(int exit_number); //just exits, but prints the program and arguments while doing so - why haven't I though of this before?
 
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2 *icel);
-void BreakPoint_Recombination_Homog(TYPE2 *icel);
 void BreakPointDeletion_RightToLeft(TYPE2 *icel);
 void BreakPointDeletion_LeftToRight(TYPE2* icel);
-void BreakPoint_Recombination_LeftToRight_then_RightToLeft(TYPE2* icel);
 void ScrambleGenomeBtwnSeasons(TYPE2* icel);
 //takes care of regulation, and also set val3 val4 fval3 and fval4, 
 // It is accessed by function pointers in the code - this is going to be fun
 void Regulation0(TYPE2 *icel); //Old version of regulation - this works well
-void Regulation1(TYPE2 *icel); //New version - still under construction
 
 // Static global data structures and parameters
-static TYPE2** world;
-static TYPE2** antib;
-static TYPE2** G;
-static TYPE2** A;
-static TYPE2** R;
-//static TYPE2 empty = (TYPE2){0,0,0,0,0,0.,0.,0.,0.,0.,{'\0'},{'\0'}};
+static TYPE2** world; // the world where bacteria live
+static TYPE2** antib; // the antibiotic plane
 
-static char* AZ="HFAB"; //genome alphabet
-int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
-int init_genome_size = 20; 
-double rscale=10.; 
-double p_movement = 0.01;
-int par_season_duration=2500;
-double ddrate=0.001; //per-gene dupdel prob
-double prob_new_brpoint = 0.01; //inflow of one new randomly placed breakpoints, per replication
-double breakprob=0.01;//0.005; // probability of activating a break point
-double spore_fraction=0.001; // fraction of nrow*ncol that sporulates
+static TYPE2** G; //auxiliary planes for visualising some features of bacteria, this colors the number of growth genes F
+static TYPE2** A; //nr. of antibiotic genes 
+static TYPE2** R; //nr. of break points
+
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
@@ -90,56 +133,68 @@ int par_outputdata_period = 100;
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
 int initialise_from_singlegenome=0;
-int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings
-int antib_bitstring_length = 16;
+char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
+int initialise_from_input=0;
+int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings - keep this to 1
+int init_genome_size = 20; // initial genome size
+
+static char* AZ="HFAB"; //genome alphabet
+int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
+double p_movement = 0.01; // probability of one step of random walk (if empty space available) per bacterium per unit time
+int par_season_duration=2500; // nr. of time steps for one growth cycle
+
+double ddrate=0.001; //per-gene duplication and deletion probability
+double prob_new_brpoint = 0.01; //inflow of one new randomly placed breakpoints, per replication
+double breakprob=0.01;//0.005; // probability of activating a break point
 double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
-double h_ag=2.;
+
+double spore_fraction=0.001; // fraction of nrow*ncol that sporulates -- i.e. probability that an individual is sampled to become a spore
+
+int antib_bitstring_length = 16; // length of the antibiotic bitstring
 double max_ab_prod_per_unit_time = -1.; // set either by command line argument, or as 1/len_ab_pos
-double beta_antib_tradeoff = 1.;
+double beta_antib_tradeoff = 1.; // tradeoff strength parameter, higher means stronger tradeoff -> more easy division of labor
 int par_all_vs_all_competition = 1; // only set if we are not using bitstrings
-double prob_noABspores_fromouterspace = 0.;
-double tmp_prob_noABspores_fromouterspace=-1.;
-int burn_in=0;
+double prob_noABspores_fromouterspace = 0.; //add spores from the outside of the grid
+double tmp_prob_noABspores_fromouterspace=-1.; //auxiliart variable
+int burn_in=0; // initial number of seasons where don't collect data - relaxation time for ad-hoc initial conditions
 int par_burn_in_time=10; //this is going to be multiplied to season length
-int mix_between_seasons = 0;
+
+int mix_between_seasons = 0; //are spores mixed between seasons 0 = no, 1 = yes.
 char breakpoint_mut_type = 'C'; // S: semi homolog recombination, T: telomeric deletion, c: centromeric towards telomeric (strepto like)
-double par_beta_birthrate=0.3;
-int const_tot_ab_mut=1;                 // if 1, the per AB mut rate is constant - rather than the per bit mutrate: 
+double par_beta_birthrate=0.3; //scaling factor for the birthrate as a function of the cumulative distance between antib and resistance
+int const_tot_ab_mut=1;                 // if 1, the per AB gene mut rate is set - if 0 the per antibiotic gene bit mutrate is set: 
 double prob_mut_antibtype_tot = 0.005;    // prob_mut_antibtype_tot is used instead of prob_mut_antibtype_perbit
                                         // to be precise: prob_mut_antibtype_perbit is set to prob_mut_antibtype_tot/antib_bitstring_length
-int nr_H_genes_to_stay_alive=0;
-int n_exponent_regulation=2; // *********** NOT ACTUALLY USED, STOP HAVING THESE HEART ATTACK ABOUT THIS ***********
-double h_growth=10.;
-double h_antib_act=3.;
-double h_antib_inhib=2.; // *********** NOT ACTUALLY USED
+int nr_H_genes_to_stay_alive=0;         // in experiments with Homeostatic genes - this is the min number of H genes to stay alive  
+double h_growth=10.; // nr. of growth genes for half max growth rate
+double h_antib_act=3.; // nr. of antibiotic genes for half max ab production rate
 
 double constABprod = 0.; //constitutive antibiotic production, default = 0.
 double scaling_factor_max_ab_prod_per_unit_time = 1.; // make this smaller to reduce AB prod, DO NOT MAKE THIS LARGER THAN 1. (default = 1.)
-double max_repl_prob_per_unit_time=0.1;
+double max_repl_prob_per_unit_time=0.1; //scales the probability of replication per unit time
 
-int which_regulation=0;
-void (*pt_Regulation)(TYPE2 *icel);
+int which_regulation=0; //flag to tell the program which regulation function
+void (*pt_Regulation)(TYPE2 *icel); // pointer to the regulation function (in case you want different ones)
 
-char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
-int initialise_from_input=0;
-int scramble_genome_btwn_seasons = 0;
-int perfectmix=0;
+int scramble_genome_btwn_seasons = 0; // if 1 it scrambles the gene order on the chromosome at the beginning of each season
+int perfectmix=0; // if 1, mixes the world plane every time step
 
-TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} };
+TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} }; // zero the all values in a TYPE2 variable
 
 void Initial(void)
 {
 	// readout parameters
 	int myseed = 5431;//time(NULL);
-	int myncol = 300;
-	int mynrow = 300;
+	int myncol = 300; //nr. of rows in the field
+	int mynrow = 300; //nr. of columns in the field
   char* readOut;
   display=0;
-  MaxTime = 2147483647; /* default=2147483647 */
+  MaxTime = 2147483647; // how long does the simulation lasts - you'll probably want to interrupt it by hand
   nrow = mynrow; /* # of row (default=100)*/
   ncol = myncol; /* # of column (default=100)*/
   init_genome[0]='\0';
   
+  // COMMAND LINE ARGUMENTS
 	for(int i = 1; i < (int)argc_g; i++)
 	{
 	  readOut = (char*)argv_g[i];
@@ -148,7 +203,7 @@ void Initial(void)
 		else if(strcmp(readOut, "-r") == 0) nrow = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-moviedir") == 0) strcpy( par_movie_directory_name , argv_g[i+1] );
     else if(strcmp(readOut, "-datafile") == 0) strcpy( par_fileoutput_name , argv_g[i+1] );
-    else if(strcmp(readOut, "-name") == 0) strcpy( par_name , argv_g[i+1] );
+    else if(strcmp(readOut, "-name") == 0) strcpy( par_name , argv_g[i+1] ); // gives a common name to all output files, which are then distinguished by extension
     else if(strcmp(readOut, "-movie_period") == 0) par_movie_period = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-data_period") == 0) par_outputdata_period = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-display") == 0) display = atoi(argv_g[i+1]);
@@ -212,23 +267,25 @@ void Initial(void)
   scale = 1; /* size of the window (default=2)*/
   margin=10;
   boundary = WRAP; /* the type of boundary: FIXED, WRAP, ECHO (default=WRAP). Note that
-		      Margolus diffusion is not supported for ECHO. */
+		                  Margolus diffusion is not supported for ECHO. */
 
   ulseedG =(myseed>0)?myseed:time(NULL);// time(NULL); /* random seed ... if you don't know the time */
   fprintf(stderr,"Seeding with: %ld\n", ulseedG);
   
+  // Sets mutation rate
   if(const_tot_ab_mut){
     prob_mut_antibtype_perbit = prob_mut_antibtype_tot/(double)(antib_bitstring_length);
     fprintf(stderr,"Constant per AB mut rate used, prob_mut_antibtype_perbit reset to %f\n", prob_mut_antibtype_perbit);
   }
-
+  
+  // checks if simulation will be started from single genome
   if( strlen(init_genome) ){
     if(initialise_from_input){
       fprintf(stderr, "Initial(): Error. You cannot specify input file AND initial genome, simulation not starting\n"); Exit(1);
     }
     initialise_from_singlegenome=1; //this will start a sim with one genome in the center of the grid
   }
-
+  
   if(!antib_with_bitstring){
     antib_bitstring_length=1; // one antibiotic
     prob_mut_antibtype_perbit = 0.; //which does not mutate, but should be re-assigned at the beg. of each season
@@ -242,7 +299,6 @@ void Initial(void)
   }
   // sets regulation pointer
   if(which_regulation==0) pt_Regulation = &Regulation0;
-  else if(which_regulation==1) pt_Regulation = &Regulation1;
   else{
     fprintf(stderr,"Initial(): Error. which_regulation got unrecognised value: %d\n",which_regulation);
     Exit(1);
@@ -263,35 +319,19 @@ void Initial(void)
 }
 
 void InitialPlane(void){
-  MakePlane(&world,&antib,&G,&A,&R);
+  MakePlane(&world,&antib,&G,&A,&R); //Allocates the planes
 
-  InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS);
-  if(max_ab_prod_per_unit_time<0.) max_ab_prod_per_unit_time = 1/(double)len_ab_poslist;
-
-  // for(int i=0; i<len_ab_poslist;i++) printf("%d %d\n",ab_poslist[i].row,ab_poslist[i].col);
-  // exit(1);
-  /* InitialSet(1,2,3,4,5)
-    1: name of plane
-    2: number of the state other than the background state
-    3: background state or empty state
-    4: state I want to put
-    5: fraction of cells that get S1 state (0 to 1)
-  */
-
-  // Initialisation
+  InitialiseABPosList(&ab_poslist, &len_ab_poslist, MAXRADIUS); //initialises an auxiliary variable for antibiotic positions in the ab plane
+  if(max_ab_prod_per_unit_time<0.) max_ab_prod_per_unit_time = 1/(double)len_ab_poslist; //scales the antibiotic production probability
+  
+  // Initialisation of the grid with a bunch of cells - or one, depending on the flags set in Initial()
   if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
   else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, world, antib);
   else InitialiseFromScratch(world,antib);
   
-  //InitialSet(world,1,0,1,0.001);
-  //ReadSavedData("glidergun.sav",1,world);
   fprintf(stderr,"\n\nworld is ready. Let's go!\n\n");
   Boundaries2(world);
-
-
-  // Initialise the grid with a bunch of cells
   
-
   //gradient takes c values from 100 to 255
   // colors cyan, blue, magenta, red i.e. 155/4 ~ 35 values per segment, i.e. 255/35 = 7
   for(int c=1;c<255;c++)
@@ -302,21 +342,11 @@ void InitialPlane(void){
       else if(c<170) ColorRGB(c, 7*(c-135) , 0, 255);
       else if(c<205) ColorRGB(c, 255 , 0, 255- 7*(c-170));
       else ColorRGB(c, 255 , 7*(c-205),0);
-      
     }
-    
   }
-  // ColorRGB(200,0,0,245);
-  // ColorRGB(200,0,0,245);
 }
 
-void print_binary(unsigned int number){
-    if(number >> 1){
-      print_binary(number >> 1);
-    }
-    putc((number & 1) ? '1' : '0', stdout);
-}
-
+// Calculates the Hamming distance between two bitstrings - represented as integers
 int HammingDistance(int a, int b){
   int h=0;
   int xor = a ^ b;
@@ -352,7 +382,6 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
   if(!antib_with_bitstring) birthrate = (cumhammdist==0)?1.:0.; 
   else birthrate = exp(-par_beta_birthrate*cumhammdist*cumhammdist); 
   return birthrate;
-  //return (cumhammdist==0)?1.:0.;
 }
 
 void NextState(int row,int col)
@@ -365,80 +394,53 @@ void NextState(int row,int col)
   // return;
   if(world[row][col].val2==0){
     int howmany_emptynei = CountMoore8(world,0,row,col); //counts how many neigh are empty
-    if( /*howmany_emptynei<6 ||*/ howmany_emptynei==8) return; // if number is less than this -> not enough resources, returns
-
-    // int howmanynei = 8 - howmany_emptynei; //so this is number of competing cells (1 or 2)
-    // printf("howmanynei: %d\n", howmanynei);
+    if( howmany_emptynei==8) return; // if the neighbourhood is empty no replication is going to happen
+    
     int dirarray[8];
     double grarray[8];
-    int bla;
-    // printf("dir and gr Array initial\n");
-    // for(bla=0;bla<8;bla++){
-    //   printf("%d,%f ",dirarray[bla],grarray[bla]);
-    // }printf("\n");
-
+        
     double totgrowth=0;
-    //printf("Hello 0\n");
+    
     //we find who these neighbors are:
     for(k=1;k<9;k++){
       nei = GetNeighborP(world,row,col,k);
       
-      //check if this cell is inhibited by any antibiotic present in focal point
+      //check if neighbour cell is inhibited 
       if(nei->val!=0){
-        int i=0;
-        int flag=0;
-        
-        double repprob= ( nei->val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]);
-        // printf("guy number %d, repprob from ab = %f\n",k, repprob );
-        // printf("Genome:\t%s \t val5 = %d, birthrate = %f, repprob = %f\n",nei->seq, nei->val5, BirthRate(nei, &antib[row][col]) , repprob);
-        //cell has no fitness genes in genome: cannot reproduce
+                        
+        double repprob= ( nei->val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]); //calculates replication probability
+        //if cell has no fitness genes in genome it cannot reproduce
         if(nei->val3==0 || repprob<=0.000000000001) continue;
-      
         //save direction
         dirarray[counter]=k;
 
-        double growth = repprob * nei->fval3;
-        // printf("Getting repl probability: %f\n",growth);
-
-        //double numgrowthgenes = Genome2genenumber(nei->seq,'G')*growthperG - Genome2genenumber(nei->seq,'p')*growthperG*1.5 - Genome2genenumber(nei->seq,'P')*growthperG*1.5 - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'); //- Genome2genenumber(nei->seq,'A')- Genome2genenumber(nei->seq,'R');
-        //if(numgrowthgenes<0) numgrowthgenes=0;
-        // printf("Fitness: \t%f, fit wo p: %f\n", numgrowthgenes, Genome2genenumber(nei->seq,'G')*growthperG - costperR*Genome2genenumber(nei->seq,'R') -prodperA*Genome2genenumber(nei->seq,'A') );
-        grarray[counter]=growth;
+        double growth = repprob * nei->fval3; // fval3 contains the previously calculated prob of replication
+        
+        grarray[counter]=growth; //save its replication rate
         totgrowth+=growth;
-        counter++;
+        counter++; //counts how many neighbourhs we have
       }
-      // if(counter==howmanynei) break;
+      
     }
-    // printf("Hello 1\n"); 
+    //we filled up the neigh array, so the one with higher repl rate has higher chances of replicating
     if(counter){
-      //double totalgrowth= 1. - exp(-beta*totgrowthgenes);  //total prob of replication
-      double rn = genrand_real2()*8.;//(double)counter;
+      double rn = genrand_real2()*8.;
       int counter2=0;
       double cumprob=0.0;
-      if(rn < totgrowth /*totalgrowth*/){
+      if(rn < totgrowth){
         cumprob += grarray[counter2];
-        while(cumprob < rn /*&& counter2<counter*/ ){
+        while(cumprob < rn ){
           counter2++;
           cumprob +=grarray[counter2];
         }
         //now we replicate the individual at direction dirarray[counter] into the focal pixel
-        //Replicate( row,col,dirarray[counter]);
         int direction=dirarray[counter2];
 
-        // printf("counter: %d, direction: %d\n",counter, direction);
         TYPE2 winner = GetNeighborS(world,row,col,direction);
         world[row][col] = winner;
-        // printf("Someone at dir %d replicates into pos %d %d.\n",direction,row,col);
-        if(Mutate(world,row,col)==1){
-        //   //printf("Genome after del at pos 0: %s\n",world[row][col].seq );
-        //   //printf("Which would then have fitness: %f\n", Genome2genenumber(world[row][col].seq,'G')*growthperG - Genome2genenumber(world[row][col].seq,'p')*growthperG - costperR*Genome2genenumber(world[row][col].seq,'R') -prodperA*Genome2genenumber(nei->seq,'A'));
-        //   //printf("From parent with genome: %s\n",winner.seq );
-        //   //printf("While the parent had fitness:  %f\n", Genome2genenumber(winner.seq,'G')*growthperG - Genome2genenumber(winner.seq,'p')*growthperG - costperR*Genome2genenumber(winner.seq,'R') -prodperA*Genome2genenumber(winner.seq,'A'));
-        //   //Pause();
-        //   ;
-        //   //printf("Hello\n");
-        }
-
+        
+        Mutate(world,row,col);
+        
         // UPON BIRTH WE SET A BUNCH OF PARAMETERS: val3 val4 val5 fval3 fval4
         (*pt_Regulation)(&world[row][col]);
         
@@ -448,50 +450,32 @@ void NextState(int row,int col)
   }
   // movement + continuous antib + death if you are on it prod maybe helps?
   else if(world[row][col].val2!=0){
-    //int flag=0;
-    double deathprob;
-    // deathprob = ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 1. : 1.-BirthRate(&world[row][col], &antib[row][col]); //no H genes you die
-    deathprob = 1. - BirthRate( &world[row][col] , &antib[row][col] ) ; // in this version nr_H_genes_to_stay_alive controls only birth rate
-                                                                        // this is the case if H are as biosynth genes but do not cause death when missing
     
-    if(genrand_real2()<deathprob){//death
-      world[row][col]=TYPE2_empty;
-      // fprintf(stderr,"Death\n");
+    // DEATH
+    double deathprob;
+    deathprob = ( world[row][col].val5 < nr_H_genes_to_stay_alive )? 1. : 1.-BirthRate(&world[row][col], &antib[row][col]); //no H genes you die
+    // deathprob = 1. - BirthRate( &world[row][col] , &antib[row][col] ) ; // in this version nr_H_genes_to_stay_alive controls only birth rate
+                                                                           // this is the case if H are as biosynth genes but do not cause death when missing
+    if(genrand_real2()<deathprob){
+      world[row][col]=TYPE2_empty; // kill - i.e. we remove the bacterium
     }else{
-      
+      //MOVEMENT
       UpdateABproduction(row, col);
       //now we will try to move
       if(p_movement>0.){
-        int neidir=1+(int)(8.*genrand_real2());        
+        int neidir=1+(int)(8.*genrand_real2()); //picks random direction
         int neirow, neicol;
-        GetNeighborC(world, row, col, neidir, &neirow, &neicol);
+        GetNeighborC(world, row, col, neidir, &neirow, &neicol); //get the neighbour in that direction
         nei=&world[neirow][neicol];
         if(nei->val2==0){ //we can only move if neighbour is empty
-          //flag=0;
-          // if(antib[neirow][neicol].valarray[0]!=0){ //if there are foreign ABs, we cannot move into the neighbouring pixel
-          //   int i=0;
-          //   while(antib[neirow][neicol].valarray[i]!=0 && i<antib[neirow][neicol].val2){
-          //    if(world[row][col].val2!=antib[neirow][neicol].valarray[i]){
-          //      flag=1;
-          //      break;
-          //    }
-          //     i++;
-          //   }
-          // }
-          if(/*!flag &&*/ genrand_real2() < p_movement){
-            // printf("seq before move -%s-", nei->seq);
-            *nei = world[row][col];
-            // printf(" seq after move %s\n", nei->seq);
-            world[row][col]=TYPE2_empty;
-            // fprintf(stderr,"movement from %d %d to %d %d\n", row,col, neirow, neicol);
+          if(genrand_real2() < p_movement){
+            *nei = world[row][col]; // move - i.e. copy content
+            world[row][col]=TYPE2_empty; //don't forget to delete previous location
           }
-        }
-
-  
+        }  
       }
     } 
   }
-
 }
 
 void Update(void){
@@ -509,10 +493,8 @@ void Update(void){
     }
     if(Time%par_outputdata_period==0){
       if(display){
-        fprintf(stderr,"Update(): Error. display = 1 is so deprecated buddy - just don't use me\nBye\n");
+        fprintf(stderr,"Update(): Error. display = 1 is deprecated - just don't use me\nBye\n");
         Exit(1);
-        // fprintf(stderr,"Time = %d\n",Time);
-        //  PrintPopStats(world,antib);
       }else{
         n_antib=PrintPopFull(world,antib);
         if(n_antib==0){
@@ -592,7 +574,7 @@ void ScrambleGenomeBtwnSeasons(TYPE2* icel){
   printf("\n");
 }
 
-//function to reseed plane with "spores"
+//function to reseed plane with "spores", mixing the field in the process
 void ChangeSeasonMix(TYPE2 **world)
 {
   TYPE2 spores[MAXSIZE];
@@ -638,7 +620,6 @@ void ChangeSeasonMix(TYPE2 **world)
     }
   }
 
-  // printf("I got %d spores\n", actual_sporenr);
   
   int ipos, jpos, zpos, attempt;
   //place spores
@@ -677,9 +658,7 @@ void ChangeSeasonMix(TYPE2 **world)
       }
       world[ipos][jpos].val=1+i%10;
       world[ipos][jpos].val2=1+i;
-      // UpdateABproduction(ipos, jpos);
-      //if(world[ipos][jpos].val2 == 250) printf("val2=250, genome %s\n",world[ipos][jpos].seq);
-    
+      
     }
   }
 }
@@ -688,7 +667,7 @@ void ChangeSeasonMix(TYPE2 **world)
 // without reshiffling their positions between seasons
 void ChangeSeasonNoMix(TYPE2 **world)
 {
-  int i,j,k,row,col,bactnumber=0;
+  int i,j,k,bactnumber=0;
   
   //Go through the plane
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++){
@@ -731,12 +710,10 @@ void ChangeSeasonNoMix(TYPE2 **world)
       }
       world[i][j].val = 1+bactnumber%10;
       world[i][j].val2 =1+bactnumber;
-      //UpdateABproduction(i,j);
+      
     }
   }
 
-  // printf("I got %d spores\n", bactnumber);
-  
 }
 
 
@@ -746,23 +723,14 @@ void ChangeSeasonNoMix(TYPE2 **world)
 // mutations are more frequet at the end of the chrom
 // according to function: 1 - exp(-0.0001*genome_size^2)
 // because this goes to zero in zero -> epsilon + (1-epsilon)(1 - exp(-0.0001*genome_size^2))
-int Mutate(TYPE2** world, int row, int col)
+void Mutate(TYPE2** world, int row, int col)
 {
-  //double epsilon=0.001;
-  //int output=0;
   TYPE2 *icell;
   icell=&world[row][col];
-  //char new_seq[MAXSIZE];
   int i,j,genome_size;//, which_mutations;
-  //double tot_mutrate;
-  //int swappos;
-
+  
   genome_size = strlen(icell->seq);
-  //strcpy(new_seq,icell->seq);
-
-  //int number_pos_seen = 0;
-  // int gsize_before = genome_size;
-
+  
   // ANTIBIOTIC TYPE MUTATIONS
   if(antib_with_bitstring){
     for(int i=0;icell->seq[i]!='\0';i++){
@@ -773,8 +741,9 @@ int Mutate(TYPE2** world, int row, int col)
     }
   }
 
-  //DUPLICATION AND DELETIONS
-  int nrmuts=bnldev(2*ddrate,genome_size);
+  // DUPLICATION AND DELETIONS
+  // fills up an array that tells us which genes we want to duplicate and delete
+  int nrmuts=bnldev(2*ddrate,genome_size); //binomial sample of genes that will be duplicated or deleted
   int mutposarr[MAXSIZE];
   int imut;
   for(imut=0;imut<genome_size;imut++) mutposarr[imut]=imut;
@@ -784,10 +753,10 @@ int Mutate(TYPE2** world, int row, int col)
     mutposarr[imut] = mutposarr[rpos];
     mutposarr[rpos] = tmp;
   }
-  
   for(imut=0; imut<nrmuts; imut++){
     int mutpos = mutposarr[imut];
-    if(genrand_real2() < 0.5){          //Deletion
+    if(genrand_real2() < 0.5){ 
+      // Deletions
       for(i=mutpos;i<genome_size;i++){ 
         icell->seq[i]=icell->seq[i+1];
         icell->valarray[i]=icell->valarray[i+1];
@@ -797,7 +766,8 @@ int Mutate(TYPE2** world, int row, int col)
       icell->valarray[genome_size]=-1;
       //update mutpos array, decrease positions that are larger than mutpos
       for(j=imut;j<nrmuts;j++) if(mutposarr[j]>mutpos) mutposarr[j]--;
-    }else{                             //Duplication
+    }else{                             
+      //Duplication
       if(genome_size>=MAXSIZE-2) continue;
       int duppos=genrand_real2()*genome_size;
       char insertgene=icell->seq[mutpos];
@@ -808,30 +778,20 @@ int Mutate(TYPE2** world, int row, int col)
       }
       icell->seq[duppos]=insertgene;
       icell->valarray[duppos]=insertval; 
-      // if(insertgene=='A'){
-      //   if(genrand_real2()<prob_mut_antibtype){
-      //     // fprintf(stderr,"Time: %d, before,after %d, ",Time, icell->valarray[duppos]);
-      //     icell->valarray[duppos]=icell->valarray[duppos] ^ (1<<(int)(genrand_real2()*antib_bitstring_length)); //this flips one random bit between 0 and 12( ^ is xor mask)
-      //     // fprintf(stderr,"%d\n",icell->valarray[duppos]);
-      //   }
-      // }
+      
       genome_size++;
       icell->seq[genome_size]='\0';
       for(j=imut;j<nrmuts;j++) if(mutposarr[j]>duppos) mutposarr[j]++;
     }
-    
   }
   
   //goes from left to right, breaks are recombination mediated
-  if(breakpoint_mut_type=='S') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was
-  else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability
-  else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability
-  else if(breakpoint_mut_type=='H') BreakPoint_Recombination_Homog(icell); // random choice of two Bs
-  else if(breakpoint_mut_type=='R') BreakPoint_Recombination_LeftToRight_then_RightToLeft(icell); // first breakp is on left , secodn is on right
+  if(breakpoint_mut_type=='S') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was  <---previous attempt that doesn't work super well
+  else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability  <---previous attempts that doesn't work super well
+  else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability    <--------  Default, used in all simulations
   else{ 
     fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
     Exit(1);
-    // if(0) BreakPoint_Recombination_Homog(icell);
   }
   
   //Random break point insertion
@@ -848,141 +808,6 @@ int Mutate(TYPE2** world, int row, int col)
     icell->seq[genome_size]='\0';
   }  
   
-  
-  return 1;
-}
-
-void BreakPoint_Recombination_Homog(TYPE2* icel){
-  
-  char *seq=icel->seq;
-  //break points
-  int breakarray[MAXSIZE];
-  int breaknr=0;
-  int genome_size = strlen(seq);
-  for (int ipos=0; ipos<genome_size; ipos++){
-    if(seq[ipos]=='B'){
-      breakarray[breaknr]=ipos;
-      breaknr++;
-    }
-  }
-  if( breaknr <= 1 ) return; //can't recombine with only one break point
-  
-  int breakpos1,breakpos2, tmp;
-  
-  //Now, how many break points will activate?
-  //THIS IS NOT CORRECT -> int howmany_mut = bnldev(breakprob/2.,breaknr); //Notice that breakprob is divided by 2 because there are two ways for each pair of breakpos to be chosen
-  int howmany_mut = bnldev(breakprob,breaknr/2); //At most half break pos can be used 
-  if(howmany_mut==0) return;
-  
-  // printf("\n\nGot %d breakages\n",howmany_mut);
-  // printf("genome: %s\n",seq);
-  // printf("Befor scrambling breakarray array = [");
-  // for(int k=0;k<breaknr;k++){
-  //   printf(" %d,", breakarray[k]);
-  // }
-  // printf("]\n");
-  
-  //scramble breakarray - Just the first 2*nr_breaks pos will suffice
-  for(int i=0; i<2*howmany_mut;i++){
-    int rand_pos = i + (int)((breaknr-i)*genrand_real2());
-    tmp = breakarray[i];
-    breakarray[i] = breakarray[ rand_pos ];
-    breakarray[ rand_pos ] = tmp; 
-  }
-  breakarray[2*howmany_mut]=-2; // -2 marks the end of breakarray
-  
-  // printf("After scrambling breakarray array = [");
-  // for(int k=0;k<breaknr;k++){
-  //   printf(" %d,", breakarray[k]);
-  // }
-  // printf("]\n");
-  // if(howmany_mut>1) {printf("Check me out *********************************\n");}
-  
-  for(int i=0; i<2*howmany_mut;i++){
-    if (breakarray[i]==-2) break;
-    if(breakarray[i]==-1){
-      i++;
-      if(breakarray[i]!=-1){
-        fprintf(stderr,"We got a problem, this should also be set to -1\n");
-        exit(1);
-      }
-      continue;
-    }
-    
-    // Ok, now i and i+1 contain the positions for break points, so we break
-    breakpos1 = breakarray[i]; //get first random break
-    breakpos2 = breakarray[i+1]; // get second random break
-    if(breakpos2 == breakpos1){
-      fprintf(stderr,"BreakPoint_Recombination_Homog(): Error. breakpos2 == breakpos1 should not happen with this algorithm\n");
-      printf("\n\nGot %d breakages\n",howmany_mut);
-      printf("genome: %s\n",seq);
-      printf("breakarray array = [");
-      for(int k=0;k<breaknr;k++){
-        printf(" %d,", breakarray[k]);
-      }
-      printf("]\n");
-      exit(1);
-      // return; // if they are the same pos we do nothing}
-    }else if(breakpos1>breakpos2){
-      tmp = breakpos1;
-      breakpos1 = breakpos2;
-      breakpos2 = tmp;
-    }
-    // printf("Seq was: %s, brpos = %d %d\n",seq, breakpos1,breakpos2);
-    //else breakpos1 < breakpos2
-    for(int j=breakpos2,lcount=0 ; j<genome_size ; j++, lcount++){
-      seq[ breakpos1+lcount ] = seq[ j ];
-      icel->valarray[ breakpos1+lcount ] = icel->valarray[j];
-    }
-    genome_size-= (breakpos2 - breakpos1) ;
-    seq[genome_size] = '\0';
-    
-    // printf("breakpos1 = %d, breakpos2 = %d\n",breakpos1,breakpos2);
-    // printf("New genome = %s\n",seq);
-        
-    i++; // <--- IMPORTANT --- we go 2 by 2, but increment the for loop by 1, so this is important
-    
-    // now we have to update the positions of breakarray
-    // those that have not been excised are either the same if pos < breakpos1 or shifted to the left if breakpos2 
-    // those excised must be deleted
-    for(int j = i+1; j<2*howmany_mut; j++ ){
-      if(breakarray[j]==-2) break;
-      else if(breakarray[j]==-1){
-        j++;
-        if(breakarray[j]!=-1){
-          fprintf(stderr,"We got a problem, this should also be set to -1\n");
-          exit(1);
-        }
-        continue;
-      }else{
-        int newbp1 = breakarray[j];
-        int newbp2 = breakarray[j+1];
-        //if either newbp1 or newbp2 are in between the positions of previous breakpos1 or breakpos2, then no breaking happens
-        if( (newbp1>breakpos1 && newbp1<breakpos2) || (newbp2>breakpos1 && newbp2<breakpos2) ){
-          // printf("Got either newbp1 or newbp2 inside previous breakpoints: %d, %d\n", newbp1,newbp2);
-          // printf("They are both set to -1 now\n");
-          breakarray[j]= -1;
-          breakarray[j+1]= -1;
-        }else{
-          //all that is left is that they are both out of breakpos1 and breakpos2
-          // question is: are they both to the left (then do nothing), 
-          // both to the right (decrease both by breakpos2-breakpos1), or one to the left and one to the right (then do only one)?
-          // it's probl simpler to test them independently
-          if(newbp1>breakpos2){ 
-            breakarray[j] -= breakpos2-breakpos1;
-            // printf("Got newbp1 outside previous breakpos2: %d\n", newbp1);
-          }
-          if(newbp2>breakpos2){ 
-            breakarray[j+1] -= breakpos2-breakpos1;
-            // printf("Got newbp2 outside previous breakpos2: %d\n", newbp2);
-          }
-        }
-        j++;
-      }
-    }
-    
-  }
-  // if(howmany_mut>2) {printf("Check me out *********************************\n");exit(1);}
 }
 
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
@@ -1004,113 +829,13 @@ void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
   if(breaknr>1){
     for(b=0; b<breaknr-1; b++){
       if(genrand_real2()<breakprob){
-        // printf("\n val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icel->val2, icel->seq, breakarray[b]);
-        // printf("Old antib gen:\n");
-        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
-        // printf("\n");
-
         match=b+genrand_real2()*(breaknr-b);
-        // printf("match pos = %d\n", breakarray[match]);
-        
-        // printf("%d %d\n", breaknr-1-match, breaknr-1-b);
-        // fflush(stdout);
-        
-        // int lcount=0;
         for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
           seq[ breakarray[b]+lcount ] = seq[i];
           icel->valarray[ breakarray[b]+lcount ] = icel->valarray[i];
-          // lcount++;
         }
         genome_size-= (breakarray[match] - breakarray[b]) ;
         seq[genome_size] = '\0';
-        // printf("New genome is \n%s\n", icel->seq);
-        // printf("New antib gen:\n");
-        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
-        // printf("\n");
-        break;
-      }
-    }
-  }
-}
-
-
-void BreakPoint_Recombination_LeftToRight_then_RightToLeft(TYPE2* icel){
-
-  char *seq=icel->seq;
-  //break points
-  int breakarray[MAXSIZE];
-  int breaknr=0;
-  int genome_size = strlen(seq);
-  
-  //fills in breakpoint position array
-  for (int ipos=0; ipos<genome_size; ipos++){
-    if(seq[ipos]=='B'){
-      breakarray[breaknr]=ipos;
-      breaknr++;
-    }
-  }
-
-  int b,b2, match;//,lcount;
-  // notice that like this breaks happen more frequently closer to 5' than to 3'
-  //Also, one break happens, period.
-  if(breaknr>1){
-    for(b=0; b<breaknr-1; b++){
-      if(genrand_real2()<breakprob){
-        // printf("\n val2 = %d; Break genome \n%s at pos breakarray[b] = %d\n", icel->val2, icel->seq, breakarray[b]);
-        // printf("Old antib gen:\n");
-        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
-        // printf("\n");
-        
-        match = -1;
-        int breakpointsleft= breaknr-1-b;
-        double norm_fact = 1-pow(1-breakprob,breakpointsleft);// renske; don't need loop below //0.; 
-        // for(b2 = breaknr-1 ; b2>b ; b2--){
-        //   printf("b2 = %d, prob here = %f\n",b2,breakprob*(1.-pow( -breakprob, breaknr -b2  ) )/(1.+breakprob));
-        //   norm_fact += breakprob*(1.-pow( -breakprob, breaknr -b2  ) )/(1.+breakprob); // this is the probability of breaking of break point b2, calculated as p(1-p(1-p(1-..)))
-        //                                                                     // i.e. the prob that this breaks and all the others before didn't
-        //   //at the end of this we have the overall norm factor.
-        // }
-        
-        double running_sum= 0; 
-        double ran_pos = genrand_real2()*norm_fact;
-        for(b2 = breaknr-1 ; b2>b ; b2--){
-            //running_sum += (breakprob*(1.-pow( -breakprob, breaknr -b2  ) )/(1.+breakprob))/norm_fact;
-            running_sum+=breakprob;//1-pow(1-breakprob,breaknr-b2); //renske
-            if(running_sum>ran_pos){
-              //then the breaking position is b2
-              break;
-            }
-        }
-        
-        // printf("TEST, running_sum = %f\n",running_sum);
-        // exit(1);
-        
-        
-        match=b2;
-        // printf("norm = %f\n", norm_fact);
-        // printf("match pos = %d\n", breakarray[match]);
-        // printf("this is the %d th from the right\n", breaknr-1-match);
-        // printf("%d %d\n", breaknr-1-match, breakpointsleft);
-        // fflush(stdout);
-        
-        if(match<=b){
-          fprintf(stderr,"BreakPoint_Recombination_LeftToRight_then_RightToLeft(): Error. match < b should not happen\n");
-          exit(1);
-        }
-        
-        
-        // int lcount=0;
-        for(int i=breakarray[match],lcount=0 ; i<genome_size ; i++, lcount++){
-          seq[ breakarray[b]+lcount ] = seq[i];
-          icel->valarray[ breakarray[b]+lcount ] = icel->valarray[i];
-          // lcount++;
-        }
-        genome_size-= (breakarray[match] - breakarray[b]) ;
-        seq[genome_size] = '\0';
-        // printf("New genome is \n%s\n", icel->seq);
-        // printf("New antib gen:\n");
-        // for(int bla=0; bla<genome_size;bla++) printf("%d ",icel->valarray[bla]);
-        // printf("\n");
         break;
       }
     }
@@ -1150,16 +875,15 @@ void BreakPointDeletion_LeftToRight(TYPE2* icel){
   }
 }
 
-//takes care of regulation, sets fval3 and fval4, accessed by function pointers in the code - this is going to be fun
-//Old version of regulation - this works well
+//takes care of "regulation", i.e. it sets fval3 and fval4, accessed by function pointers in the code
 void Regulation0(TYPE2 *icel){
   // SET GROWTH AND AB PRODUCTION PARAMETERS
   icel->val3=Genome2genenumber(icel->seq,'F');
   icel->val4=Genome2genenumber(icel->seq,'A');
   icel->val5=Genome2genenumber(icel->seq,'H');
 
-  double fg = icel->val3; //Genome2genenumber(nei->seq,'F');
-  double ag = icel->val4; //Genome2genenumber(nei->seq,'A');
+  double fg = icel->val3; 
+  double ag = icel->val4; 
   
   icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
   
@@ -1167,41 +891,13 @@ void Regulation0(TYPE2 *icel){
   constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them out of thin air?
   
   icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
-
 } 
-//New version - still under construction
-void Regulation1(TYPE2 *icel){
-  fprintf(stderr, "Regulation1(): Error. Do not use this function, it is under construction\n");
-  exit(1);
-  
-  // SET GROWTH AND AB PRODUCTION PARAMETERS
-  icel->val3=Genome2genenumber(icel->seq,'F');
-  icel->val4=Genome2genenumber(icel->seq,'A');
-  icel->val5=Genome2genenumber(icel->seq,'H');
-
-  double fg=pow( icel->val3 , n_exponent_regulation); //Genome2genenumber(nei->seq,'F');
-  double ag=pow( icel->val4 , n_exponent_regulation); //Genome2genenumber(nei->seq,'A');
-  
-  double fgscale=pow( h_growth, n_exponent_regulation); //with 1 it was doing interesting things, with 5 ab production never happened
-  double agscale=pow( h_antib_act, n_exponent_regulation);
-  double fgscale_inhib_a=pow( h_antib_inhib, n_exponent_regulation);
-  
-  double regulation_growth = fg/(fg+fgscale);
-  double inhib_antib = fg/(fg+fgscale_inhib_a);
-  double regulation_antib  = ag/(ag+agscale) - inhib_antib; regulation_antib = (regulation_antib>0.)?regulation_antib:0.;
-  
-  double tot_growth = regulation_growth+regulation_antib+0.1;
-
-  icel->fval3 = max_repl_prob_per_unit_time*regulation_growth/tot_growth;                         // was -> =repprob*0.1*fg/(fg+fgscale);// was -> /(ratio+rscale));
-  icel->fval4 = max_ab_prod_per_unit_time*regulation_antib/tot_growth;    //was -> //max_ab_prod_per_unit_time*ag/(ag+h_ag)*(exp(-beta_antib_tradeoff*fg));
-
-}
 
 void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
 
   int i,k;
-  if( icell->val4==0 || icell->fval4<0.000000000001) return;//if you don't have antib genes, surely 
+  if( icell->val4==0 || icell->fval4<0.000000000001) return;//if you don't have antib genes, surely no ab are placed
 
   int howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
   int which_ab[MAXSIZE];
@@ -1253,18 +949,7 @@ void UpdateABproduction(int row, int col){
   
 }
 
-int Char2Num(char c)
-{
-	switch(c){
-		case 'F': return 0;
-		case 'A': return 1;
-		case 'B': return 2;
-		default: {
-      fprintf(stderr, "Char2Num(): Error, character not recognised, got %c\n",c); 
-      return -1;
-    }
-	}
-}
+
 char Num2Char(int c)
 {
 	switch(c){
@@ -1279,106 +964,6 @@ char Num2Char(int c)
 	}
 }
 
-
-void PrintPopStats(TYPE2 **world,TYPE2 **antib)
-{
-  int i,j,k,l;//,max;
-  int countA = 0;
-  int countB =0;
-  int countF=0;
-  int countH=0;
-  double sumabs = 0.0;
-  // char agenome[MAXSIZE];
-	int av_genome[MAXSIZE][8] ={}; //prints consensus genome, rather than a single one
-  int cellcount = 0;
-
-  // printf("Print nothing and return for now\n");
-  // return;
-
-	for(k=0;k<MAXSIZE;k++)for(l=0;l<8;l++) av_genome[k][l]=0;
-	
-  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
-  {
-    if(world[i][j].val2>0)
-    {
-      cellcount++;
-      // countG += Genome2genenumber(world[i][j].seq,'G');
-      // countR += Genome2genenumber(world[i][j].seq,'R');
-      countF += world[i][j].val3; //Genome2genenumber(world[i][j].seq,'F');
-      countA += world[i][j].val4; //Genome2genenumber(world[i][j].seq,'A');
-      countB += Genome2genenumber(world[i][j].seq,'B');
-      countH += world[i][j].val5; //Genome2genenumber(world[i][j].seq,'B');
-
-      // countP += Genome2genenumber(world[i][j].seq,'p');
-      // countP += Genome2genenumber(world[i][j].seq,'P');
-      //strcpy(agenome,world[i][j].seq);
-			for(k=0; world[i][j].seq[k] != '\0';k++){
-        int char2num = Char2Num(world[i][j].seq[k]);
-        if(char2num==-1){
-          fprintf(stderr,"Pop stats, val2 =%d,  got garbage from genome. Time = %d, k (garbage pos)=%d, seq = %s\n" ,world[i][j].val2, Time, k, world[i][j].seq );
-          Exit(1);
-        }
-				av_genome[k][ char2num ]++; // clearly the better way would be an alignment, because this mismatches positions after dup/dels
-			}
-    }
-    sumabs+=antib[i][j].fval;
-  }
-  printf("Population stats at T=%d\n",Time);
-  printf("POPSIZE:\t%d\n",cellcount);
-  printf("AVG F:  \t%f\n",(float)countF/cellcount);
-  printf("AVG A:  \t%f\n",(float)countA/cellcount);
-  printf("AVG B:  \t%f\n",(float)countB/cellcount);
-  // printf("AVG P:  \t%f\n",(float)countP/cellcount);
-  // printf("AVG AB: \t%f\n",sumabs/(nrow*ncol));
-  // printf("A genome:\t%s\n",agenome);
-	// Not very good
-  // for(k=0;k<MAXSIZE;k++){
-	// 	max=-1;
-	// 	for(l=0;l<strlen(AZ);l++){
-  //     // printf("seq pos %d, gene=%c, got howmany = %d\n",k,Num2Char( l ), av_genome[k][l]);
-  //     if(av_genome[k][l] > max) {
-  //       max = av_genome[k][l];
-  //       if(max>0) agenome[k] = Num2Char( l ) ;
-  //       else agenome[k] = '\0';
-	// 	}
-  //   }
-  //   if(max<=0){
-  //     agenome[k] = '\0';
-  //     break;
-  //   }
-	// }
-  // printf("A genome:\t%s\n",agenome);
-  // printf("\n");
-
-  int tot_per_pos[MAXSIZE]={0};
-  for( k=0; k<MAXSIZE; k++ ){
-		int tot=0;
-    for(l=0; l<strlen(AZ); l++){
-      tot+= av_genome[k][l];
-    }
-    tot_per_pos[k]=tot;
-  }
-  
-  for(l=0;l<strlen(AZ);l++){
-    for( k=0; k<MAXSIZE; k++ ){
-      if(tot_per_pos[k]){
-        printf("%d",(int)(9.999* av_genome[k][l]/((double)tot_per_pos[k]) )  );
-      }else{
-        printf("\n");
-        break;
-      }
-    }
-  }
-  
-  
-  
-  double array[16] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
-  array[0] = (float)countF/cellcount;
-  array[1] = (float)countA/cellcount;
-  array[2] = (float)countB/cellcount;
-  // array[3] = (float)countP/cellcount;
-  PlotArray(array);
-}
 
 // print to file cell by cell in order, with format:
 // [Time] [tot_nr_antib] [antib,array,if,antibs,else,0,] (if val2)[[val2] [genome] [abgenes,if,ab,genes]](else)[0 n 0,]
@@ -1415,30 +1000,9 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
   return tot_antib_genes;
 }
 
-int GetGenomeColour(const char * seq){
-    // Hash functie die doet positie^index+1 waarbij R=1, P=2, q=3 (dus die niet)
-    //int gsize = strlen(seq);
-	char course[2];
-	course[0] = (Genome2genenumber(seq,'A')>0)?'A':'_';
-	course[1] = (Genome2genenumber(seq,'R')>0)?'R':'_';
-
-    unsigned int hash = 0;
-    for(int i = 0; i < 2; i++)
-    {
-        hash += (int)course[i];
-        hash += (hash << 10);
-        hash ^= (hash >> 6);
-    }
-    hash += (hash << 3);
-    hash ^= (hash >> 11);
-    hash += (hash << 15);
-    hash = ((int)(hash%99))+1;
-		if(0==hash) fprintf(stderr, "GetGenomeColour(): Error. hash = 0\n");
-    //cout << hash << endl;
-    return hash;
-}
-
-
+// Assigs a color (an RGB tuple) to a number, which means that you can use it to map, e.g. G[row][col].val = nr_of_growth_genes, to a colour in a color palette
+// the colour palette is defined in InitialPlane()
+//I am pretty sure this is kinda buggy - but it should be easy to fix
 void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R)
 {
 	int i,j;
@@ -1446,16 +1010,12 @@ void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R)
 	for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++)
 		if(world[i][j].val==0)
     {
-      //world[i][j].val2 = 0;
 		  G[i][j].val = 0;
       A[i][j].val = 0;
       R[i][j].val = 0;
     }
     else
     {
-      //world[i][j].val = 1;
-      //world[i][j].val = GetGenomeColour(world[i][j].seq);
-      //if(world[i][j].val < 1) fprintf(stderr,"FUck.\n"), Exit(0);
       int Gcolour = Genome2genenumber(world[i][j].seq,'F')+colordisplacement;//+200;
       if(Gcolour==colordisplacement) G[i][j].val = 1;
       else if (Gcolour<255) G[i][j].val = Gcolour;
@@ -1473,6 +1033,7 @@ void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R)
     }
 }
 
+//Prepares the arrays for making pngs
 int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R)
 {
   int popcount=0;
@@ -1528,18 +1089,15 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
     }
   }
   
-  // printf("Hello, howmany = %d\n", *p_len_ab_poslist);
-  // printf("The last position looks like: row = %d, col = %d \n", (*p_ab_poslist)[len_ab_poslist-1].row,(*p_ab_poslist)[len_ab_poslist-1].col);
-  
-  // exit(1);
   return;
 }
 
 void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **bact){
+  
   FILE *fp = fopen(par_fileinput_name,"r"); 
   fprintf(stderr, "InitialiseFromInput(): Warning, for now only reads genomes, not AB already in the plane\n");
   fprintf(stderr, "InitialiseFromInput(): Warning, changing season within this function\n");
-  int ftime, fnr_antib_infield;
+  
   char fline[5241], *token, *token2,fab_string[10241];
   char fline_cp[5241];
   const char sep[2]=" ";
@@ -1716,11 +1274,9 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
       (*pt_Regulation)(&world[i][j]);  //sets regulation parameters - tested, works fine :)
       
       world[i][j].seq[init_genome_size+nr_H_genes_to_stay_alive]='\0';
-      // printf("Genome: %s\n", world[i][j].seq);
+      
       count++;
-      //world[i][j].val2 = Genome2genenumber(world[i][j].seq,'G');
-      //UpdateABproduction(i, j);
-
+      
     }
   }
 }
