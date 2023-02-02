@@ -4,8 +4,7 @@ Evolution of mutation-driven division of labour in Streptomyces
 This code accompanies the article:
 Evolution of genome fragility enables microbial division of labor.
 Authors: E.S. Colizzi, B. van Dijk, R.M.H. Merks, D.E. Rozen, R.M.A. Vroomans
-Which is currently under revision. 
-Preprint: https://www.biorxiv.org/content/10.1101/2021.06.04.447040v3
+Molecular Systems Biology (2023)e11353 https://doi.org/10.15252/msb.202211353 
 
 The source code is written in c, and uses a custom version of the cash library 
 (which you can find here: https://github.com/escolizzi/cash2-s.BINF2018). 
